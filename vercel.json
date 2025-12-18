@@ -1,0 +1,12 @@
+{
+    "rewrites": [
+        {
+            "source": "/chatwoot-api/:path*",
+            "destination": "https://chatwoot-production-85da.up.railway.app/:path*"
+        },
+        {
+            "source": "/(.*)",
+            "destination": "/index.html"
+        }
+    ]
+}

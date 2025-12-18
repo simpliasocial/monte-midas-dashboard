@@ -1,11 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
+import { config } from '../config';
 
-// Obtener las variables de entorno
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Obtener las variables de configuración
+const supabaseUrl = config.supabase.url;
+const supabaseAnonKey = config.supabase.anonKey;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Please check your .env.local file.');
+  throw new Error('Missing Supabase configuration. Please check src/config.ts');
 }
 
 // Crear el cliente de Supabase

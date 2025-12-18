@@ -11,10 +11,11 @@ const completionData = [
 ];
 
 const fieldData = [
-  { field: "Nombre", rate: 95 },
-  { field: "Teléfono", rate: 88 },
-  { field: "Ubicación", rate: 72 },
-  { field: "Tipo de Oro", rate: 65 },
+  { field: "NombreCompleto", rate: 98 },
+  { field: "celular", rate: 95 },
+  { field: "agencia", rate: 85 },
+  { field: "fecha_visita", rate: 78 },
+  { field: "hora_visita", rate: 72 },
 ];
 
 export function DataCaptureChart({ className }: DataCaptureChartProps) {
@@ -39,8 +40,8 @@ export function DataCaptureChart({ className }: DataCaptureChartProps) {
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
-              <Legend 
-                verticalAlign="bottom" 
+              <Legend
+                verticalAlign="bottom"
                 height={36}
                 formatter={(value) => <span className="text-sm text-foreground">{value}</span>}
               />
@@ -49,17 +50,17 @@ export function DataCaptureChart({ className }: DataCaptureChartProps) {
         </div>
         <div className="mt-2 text-center">
           <span className="text-3xl font-bold text-success">78%</span>
-          <p className="text-sm text-muted-foreground">Completion Rate</p>
+          <p className="text-sm text-muted-foreground">Tasa de Completitud</p>
         </div>
       </div>
 
       {/* Horizontal Bar Chart */}
       <div>
-        <h4 className="text-sm font-medium text-muted-foreground mb-4">Completion Rate por Campo</h4>
+        <h4 className="text-sm font-medium text-muted-foreground mb-4">Tasa de Completitud por Campo</h4>
         <div className="space-y-4">
           {fieldData.map((item, index) => (
-            <div 
-              key={item.field} 
+            <div
+              key={item.field}
               className="animate-fade-in"
               style={{ animationDelay: `${index * 100}ms` }}
             >

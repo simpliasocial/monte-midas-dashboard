@@ -8,6 +8,13 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    proxy: {
+      '/chatwoot-api': {
+        target: 'https://chatwoot-production-85da.up.railway.app',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/chatwoot-api/, ''),
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

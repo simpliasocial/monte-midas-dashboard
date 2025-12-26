@@ -67,7 +67,7 @@ const ChatwootPage = () => {
     };
 
     const openInChatwoot = (id: number) => {
-        window.open(`https://chatwoot-production-85da.up.railway.app/app/accounts/2/conversations/${id}`, '_blank');
+        window.open(`https://chatwoot-production-e75e.up.railway.app/app/accounts/1/conversations/${id}`, '_blank');
     };
 
     return (

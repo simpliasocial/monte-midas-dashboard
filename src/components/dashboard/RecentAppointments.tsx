@@ -6,7 +6,7 @@ import {
     TableHeader,
     TableRow
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+
 import { Calendar, Clock, MapPin, Phone, User } from "lucide-react";
 
 const recentAppointments = [
@@ -67,7 +67,7 @@ export function RecentAppointments() {
                         <TableHead>Contacto</TableHead>
                         <TableHead>Agencia</TableHead>
                         <TableHead>Fecha y Hora</TableHead>
-                        <TableHead className="text-right">Estado</TableHead>
+
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -103,11 +103,7 @@ export function RecentAppointments() {
                                     </div>
                                 </div>
                             </TableCell>
-                            <TableCell className="text-right">
-                                <Badge variant={appointment.status === "Confirmada" ? "default" : "secondary"}>
-                                    {appointment.status}
-                                </Badge>
-                            </TableCell>
+
                         </TableRow>
                     ))}
                 </TableBody>

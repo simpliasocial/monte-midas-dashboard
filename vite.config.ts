@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
     proxy: {
       '/chatwoot-api': {
-        target: 'https://chatwoot-production-85da.up.railway.app',
+        target: 'https://chatwoot-production-e75e.up.railway.app',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/chatwoot-api/, ''),
       },

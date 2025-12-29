@@ -15,12 +15,12 @@ import { SectionCard } from "@/components/dashboard/SectionCard";
 // Mock data based on User's Script Context
 const funnelStages = [
   { label: "Solicita Información", value: 1200, percentage: 100, color: "hsl(224, 62%, 32%)" },
-  { label: "Tiene Dudas", value: 950, percentage: 79, color: "hsl(224, 55%, 45%)" },
-  { label: "Interesado", value: 800, percentage: 66, color: "hsl(142, 60%, 45%)" },
-  { label: "Desea un Crédito", value: 600, percentage: 50, color: "hsl(142, 60%, 35%)" },
-  { label: "Agenda Cita", value: 356, percentage: 29, color: "hsl(45, 93%, 58%)" },
-  { label: "No Tiene Joyas de Oro", value: 200, percentage: 16, color: "hsl(0, 70%, 60%)" },
-  { label: "No Aplica", value: 150, percentage: 12, color: "hsl(0, 0%, 60%)" },
+  { label: "Interesado", value: 972, percentage: 81, color: "hsl(142, 60%, 45%)" },
+  { label: "Agenda Cita", value: 356, percentage: 30, color: "hsl(45, 93%, 58%)" },
+  { label: "Desea un Crédito", value: 300, percentage: 25, color: "hsl(142, 60%, 35%)" },
+  { label: "Tiene Dudas", value: 250, percentage: 21, color: "hsl(224, 55%, 45%)" },
+  { label: "No Tiene Joyas de Oro", value: 200, percentage: 17, color: "hsl(0, 70%, 60%)" },
+  { label: "No Aplica", value: 150, percentage: 13, color: "hsl(0, 0%, 60%)" },
 ];
 
 const monthlyTrendData = [

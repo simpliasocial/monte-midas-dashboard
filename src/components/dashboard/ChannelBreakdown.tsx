@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { MessageCircle, Facebook, Instagram, Video } from "lucide-react";
+import { MessageCircle, Facebook, Instagram } from "lucide-react";
 
 interface ChannelData {
   name: string;
@@ -13,7 +13,7 @@ const channels: ChannelData[] = [
   { name: "WhatsApp", count: 850, percentage: 55, icon: MessageCircle, color: "bg-green-500" },
   { name: "Facebook", count: 350, percentage: 23, icon: Facebook, color: "bg-blue-600" },
   { name: "Instagram", count: 200, percentage: 13, icon: Instagram, color: "bg-pink-500" },
-  { name: "TikTok", count: 150, percentage: 9, icon: Video, color: "bg-black" },
+
 ];
 
 export function ChannelBreakdown({ className }: { className?: string }) {

@@ -9,17 +9,24 @@ interface ChannelData {
   color: string;
 }
 
-const channels: ChannelData[] = [
-  { name: "WhatsApp", count: 850, percentage: 55, icon: MessageCircle, color: "bg-green-500" },
-  { name: "Facebook", count: 350, percentage: 23, icon: Facebook, color: "bg-blue-600" },
-  { name: "Instagram", count: 200, percentage: 13, icon: Instagram, color: "bg-pink-500" },
+const iconMap: Record<string, any> = {
+  MessageCircle,
+  Facebook,
+  Instagram,
+};
 
-];
+interface ChannelBreakdownProps {
+  className?: string;
+  data?: ChannelData[];
+}
 
-export function ChannelBreakdown({ className }: { className?: string }) {
+export function ChannelBreakdown({ className, data }: ChannelBreakdownProps) {
+  // If no data provided, show empty or default
+  const displayChannels = data || [];
+
   return (
     <div className={cn("space-y-4", className)}>
-      {channels.map((channel, index) => (
+      {displayChannels.map((channel, index) => (
         <div
           key={channel.name}
           className="p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors animate-fade-in"
@@ -27,7 +34,10 @@ export function ChannelBreakdown({ className }: { className?: string }) {
         >
           <div className="flex items-center gap-3 mb-2">
             <div className={cn("p-2 rounded-lg", channel.color)}>
-              <channel.icon className="h-4 w-4 text-white" />
+              {(() => {
+                const IconComponent = typeof channel.icon === 'string' ? iconMap[channel.icon] : channel.icon;
+                return IconComponent ? <IconComponent className="h-4 w-4 text-white" /> : null;
+              })()}
             </div>
             <span className="font-semibold text-foreground">{channel.name}</span>
             <span className="ml-auto text-lg font-bold text-primary">{channel.count}</span>

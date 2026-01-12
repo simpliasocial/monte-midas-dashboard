@@ -3,22 +3,23 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from "recharts";
 
 interface DataCaptureChartProps {
   className?: string;
+  data?: {
+    completionRate: number;
+    fieldRates: Array<{ field: string; rate: number }>;
+    incomplete: number;
+    funnelDropoff: number;
+  };
 }
 
-const completionData = [
-  { name: "Completado", value: 78, color: "hsl(142, 71%, 45%)" },
-  { name: "Abandonado", value: 22, color: "hsl(220, 30%, 65%)" },
-];
+export function DataCaptureChart({ className, data }: DataCaptureChartProps) {
+  const completionRate = data?.completionRate || 0;
+  const fieldData = data?.fieldRates || [];
 
-const fieldData = [
-  { field: "NombreCompleto", rate: 98 },
-  { field: "celular", rate: 95 },
-  { field: "agencia", rate: 85 },
-  { field: "fecha_visita", rate: 78 },
-  { field: "hora_visita", rate: 72 },
-];
+  const completionData = [
+    { name: "Completado", value: completionRate, color: "hsl(142, 71%, 45%)" },
+    { name: "Abandonado", value: 100 - completionRate, color: "hsl(220, 30%, 65%)" },
+  ];
 
-export function DataCaptureChart({ className }: DataCaptureChartProps) {
   return (
     <div className={cn("grid grid-cols-1 lg:grid-cols-2 gap-6", className)}>
       {/* Donut Chart */}
@@ -49,7 +50,7 @@ export function DataCaptureChart({ className }: DataCaptureChartProps) {
           </ResponsiveContainer>
         </div>
         <div className="mt-2 text-center">
-          <span className="text-3xl font-bold text-success">78%</span>
+          <span className="text-3xl font-bold text-success">{completionRate}%</span>
           <p className="text-sm text-muted-foreground">Tasa de Completitud</p>
         </div>
       </div>

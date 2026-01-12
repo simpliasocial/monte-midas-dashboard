@@ -9,55 +9,25 @@ import {
 
 import { Calendar, Clock, MapPin, Phone, User } from "lucide-react";
 
-const recentAppointments = [
-    {
-        id: 1,
-        nombre: "Margarita Veliz",
-        celular: "+593 99 123 4567",
-        agencia: "Agencia Amazonas",
-        fecha: "2025-12-19",
-        hora: "10:00 AM",
-        status: "Confirmada"
-    },
-    {
-        id: 2,
-        nombre: "Juan Pérez",
-        celular: "+593 98 765 4321",
-        agencia: "Agencia Villaflora",
-        fecha: "2025-12-19",
-        hora: "11:30 AM",
-        status: "Pendiente"
-    },
-    {
-        id: 3,
-        nombre: "María López",
-        celular: "+593 99 876 5432",
-        agencia: "Agencia Marianitas",
-        fecha: "2025-12-20",
-        hora: "09:00 AM",
-        status: "Confirmada"
-    },
-    {
-        id: 4,
-        nombre: "Carlos Ruiz",
-        celular: "+593 97 654 3210",
-        agencia: "Agencia Sangolquí",
-        fecha: "2025-12-20",
-        hora: "03:00 PM",
-        status: "Confirmada"
-    },
-    {
-        id: 5,
-        nombre: "Ana Torres",
-        celular: "+593 96 543 2109",
-        agencia: "Agencia Tumbaco",
-        fecha: "2025-12-21",
-        hora: "10:30 AM",
-        status: "Pendiente"
-    }
-];
+export interface Appointment {
+    id: number;
+    nombre: string;
+    celular: string;
+    agencia: string;
+    fecha: string;
+    hora: string;
+    status: string;
+}
 
-export function RecentAppointments() {
+interface RecentAppointmentsProps {
+    appointments?: Appointment[];
+}
+
+export function RecentAppointments({ appointments = [] }: RecentAppointmentsProps) {
+    // Use props if available, otherwise fallback to empty or loading state
+    // Actually, let's just use the props. The parent will handle loading or passing default.
+    const displayAppointments = appointments.length > 0 ? appointments : [];
+
     return (
         <div className="rounded-md border">
             <Table>
@@ -71,7 +41,7 @@ export function RecentAppointments() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {recentAppointments.map((appointment) => (
+                    {displayAppointments.map((appointment) => (
                         <TableRow key={appointment.id}>
                             <TableCell className="font-medium">
                                 <div className="flex items-center gap-2">

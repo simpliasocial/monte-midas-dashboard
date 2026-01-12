@@ -18,9 +18,9 @@ export function FunnelChart({ stages, className }: FunnelChartProps) {
   return (
     <div className={cn("space-y-3", className)}>
       {stages.map((stage, index) => {
-        const widthPercent = (stage.value / maxValue) * 100;
+        const widthPercent = maxValue > 0 ? (stage.value / maxValue) * 100 : 0;
         const delay = index * 100;
-        
+
         return (
           <div
             key={stage.label}
@@ -39,7 +39,7 @@ export function FunnelChart({ stages, className }: FunnelChartProps) {
                   style={{
                     width: `${widthPercent}%`,
                     backgroundColor: stage.color,
-                    minWidth: '80px',
+                    minWidth: stage.value > 0 ? '80px' : '0px',
                   }}
                 >
                   <span className="text-white font-bold text-lg drop-shadow-sm">

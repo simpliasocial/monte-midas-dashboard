@@ -23,6 +23,9 @@ export interface ChatwootConversation {
         created_at: number;
     };
     timestamp: number;
+    custom_attributes?: {
+        [key: string]: any;
+    };
 }
 
 export const chatwootService = {
@@ -92,6 +95,7 @@ export const chatwootService = {
                     page: params.page || 1,
                     status: 'all', // Always fetch all status as requested
                     sort_by: params.sort_by || 'last_activity_at_desc',
+                    since: params.since, // Added missing parameter
                     until: params.until,
                     labels: params.labels ? params.labels.join(',') : undefined,
                 },

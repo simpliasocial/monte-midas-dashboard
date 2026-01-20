@@ -121,4 +121,18 @@ export const chatwootService = {
             return [];
         }
     },
+
+    getInboxes: async (): Promise<any[]> => {
+        try {
+            const response = await axios.get(`${CHATWOOT_API_URL}/inboxes`, {
+                headers: {
+                    api_access_token: API_TOKEN,
+                },
+            });
+            return response.data.payload;
+        } catch (error) {
+            console.error('Error fetching Chatwoot inboxes:', error);
+            return [];
+        }
+    },
 };

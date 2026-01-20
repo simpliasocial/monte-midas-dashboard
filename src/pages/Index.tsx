@@ -110,7 +110,7 @@ const Index = () => {
       </div>
 
       {/* Main KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
         <KPICard
           title="Total de Leads Entrantes"
           value={kpis.totalLeads.toLocaleString()}
@@ -131,6 +131,13 @@ const Index = () => {
           value={kpis.citasAgendadas.toLocaleString()}
           subtitle={periodLabel}
           icon={Calendar}
+          size="lg"
+        />
+        <KPICard
+          title="Desea un Crédito"
+          value={kpis.deseaCreditoCount.toLocaleString()}
+          subtitle={periodLabel}
+          icon={CheckCircle}
           size="lg"
         />
         <KPICard

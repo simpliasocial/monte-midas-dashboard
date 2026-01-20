@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { MessageCircle, Facebook, Instagram } from "lucide-react";
+import { MessageCircle, Facebook, Instagram, HelpCircle } from "lucide-react";
 
 interface ChannelData {
   name: string;
@@ -13,6 +13,7 @@ const iconMap: Record<string, any> = {
   MessageCircle,
   Facebook,
   Instagram,
+  HelpCircle,
 };
 
 interface ChannelBreakdownProps {

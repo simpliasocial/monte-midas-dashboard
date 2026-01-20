@@ -9,6 +9,7 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
             totalLeads: 0,
             leadsInteresados: 0,
             citasAgendadas: 0,
+            deseaCreditoCount: 0,
             noCalifican: 0,
             tasaAgendamiento: 0,
             tasaDescarte: 0,
@@ -60,8 +61,30 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
 
             // 3. Fetch ALL conversations (Client-side filtering is safer for "February = 0" requirement)
             // We fetch 'all' status to get everything.
-            const response = await chatwootService.getConversations({ status: 'all' });
-            const allConversationsRaw = response.payload;
+            // 3. Fetch ALL conversations (Iterate through pages)
+            let allConversationsRaw: any[] = [];
+            let page = 1;
+            let hasMore = true;
+
+            while (hasMore) {
+                const response = await chatwootService.getConversations({ status: 'all', page });
+                const conversations = response.payload;
+
+                if (conversations.length === 0) {
+                    hasMore = false;
+                } else {
+                    allConversationsRaw = [...allConversationsRaw, ...conversations];
+                    // Check if we reached the last page
+                    // If the number of items returned is less than typical page size (usually 25), we are done.
+                    // Or check meta if available, but checking count is robust enough for now.
+                    // Chatwoot default page size is 25.
+                    if (conversations.length < 25) {
+                        hasMore = false;
+                    } else {
+                        page++;
+                    }
+                }
+            }
 
             // 4. Filter Data for KPIs
             const kpiConversations = allConversationsRaw.filter(conv => {
@@ -107,8 +130,9 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
                 }));
 
             // Funnel Data
+            // Each step shows only leads that have that specific label
             const funnelData = [
-                { label: "Solicita Información", value: solicitaInfoCount, percentage: 100, color: "hsl(224, 62%, 32%)" },
+                { label: "Solicita Información", value: solicitaInfoCount, percentage: totalLeads > 0 ? Math.round((solicitaInfoCount / totalLeads) * 100) : 0, color: "hsl(224, 62%, 32%)" },
                 { label: "Interesado", value: leadsInteresados, percentage: totalLeads > 0 ? Math.round((leadsInteresados / totalLeads) * 100) : 0, color: "hsl(142, 60%, 45%)" },
                 { label: "Agenda Cita", value: citasAgendadas, percentage: totalLeads > 0 ? Math.round((citasAgendadas / totalLeads) * 100) : 0, color: "hsl(45, 93%, 58%)" },
                 { label: "Desea un Crédito", value: deseaCreditoCount, percentage: totalLeads > 0 ? Math.round((deseaCreditoCount / totalLeads) * 100) : 0, color: "hsl(142, 60%, 35%)" },
@@ -117,10 +141,64 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
                 { label: "No Aplica", value: noAplicaCount, percentage: totalLeads > 0 ? Math.round((noAplicaCount / totalLeads) * 100) : 0, color: "hsl(0, 0%, 60%)" },
             ];
 
+            // Debugging: Log all unique labels found to help verify KPIs
+            const allLabels = new Set<string>();
+            kpiConversations.forEach(c => c.labels?.forEach(l => allLabels.add(l)));
+            console.log('Unique Labels Found in Dashboard Data:', Array.from(allLabels));
+            console.log('Total Leads:', totalLeads);
+            console.log('Leads Interesados Count:', leadsInteresados);
+
             // Channel Breakdown
-            const channelData = [
-                { name: "WhatsApp", count: totalLeads, percentage: 100, icon: "MessageCircle", color: "bg-green-500" },
-            ];
+            // Fetch inboxes to map IDs to Names/Types
+            const inboxes = await chatwootService.getInboxes();
+            const inboxMap = new Map(inboxes.map((inbox: any) => [inbox.id, inbox]));
+
+            const channelCounts = new Map<string, number>();
+            kpiConversations.forEach(conv => {
+                const inbox = inboxMap.get(conv.inbox_id);
+                let channelName = 'Otros';
+
+                if (inbox) {
+                    // Map channel type to display name
+                    const type = inbox.channel_type;
+                    if (type === 'Channel::Whatsapp') channelName = 'WhatsApp';
+                    else if (type === 'Channel::FacebookPage') channelName = 'Facebook'; // Could be Messenger or Instagram depending on config, but usually FB
+                    else if (type === 'Channel::Instagram') channelName = 'Instagram'; // If specific Instagram channel exists
+                    else channelName = inbox.name; // Fallback to inbox name
+                }
+
+                channelCounts.set(channelName, (channelCounts.get(channelName) || 0) + 1);
+            });
+
+            const channelData = Array.from(channelCounts.entries()).map(([name, count]) => {
+                let icon = "MessageCircle";
+                let color = "bg-gray-500";
+
+                if (name === 'WhatsApp') {
+                    icon = "MessageCircle";
+                    color = "bg-green-500";
+                } else if (name === 'Facebook') {
+                    icon = "Facebook";
+                    color = "bg-blue-600";
+                } else if (name === 'Instagram') {
+                    icon = "Instagram";
+                    color = "bg-pink-600";
+                }
+
+                return {
+                    name,
+                    count,
+                    percentage: totalLeads > 0 ? Math.round((count / totalLeads) * 100) : 0,
+                    icon,
+                    color
+                };
+            });
+
+            // If no data, show empty state or default
+            if (channelData.length === 0 && totalLeads > 0) {
+                // Fallback if something went wrong with mapping but we have leads
+                channelData.push({ name: "Desconocido", count: totalLeads, percentage: 100, icon: "HelpCircle", color: "bg-gray-400" });
+            }
 
             // 5. Weekly Trend Calculation (Specific Week of Selected Month)
             const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -150,6 +228,17 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
                 return false;
             });
 
+            // Map days to specific dates for the selected week
+            const dayToDateMap = new Map<string, number>();
+            let tempDate = new Date(trendStart);
+            while (tempDate <= trendEnd) {
+                if (getWeekNumber(tempDate) === targetWeek) {
+                    const dayName = days[tempDate.getDay()];
+                    dayToDateMap.set(dayName, tempDate.getDate());
+                }
+                tempDate.setDate(tempDate.getDate() + 1);
+            }
+
             weeklyConversations.forEach(conv => {
                 const date = new Date(conv.timestamp * 1000);
                 const dayName = days[date.getDay()];
@@ -162,11 +251,17 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
                 weeklyTrendMap.set(dayName, current);
             });
 
-            const weeklyTrend = days.map(day => ({
-                week: day,
-                leads: weeklyTrendMap.get(day)!.leads,
-                citas: weeklyTrendMap.get(day)!.citas
-            }));
+            const weeklyTrend = days.map(day => {
+                const dateNum = dayToDateMap.get(day);
+                // If date exists for this day in the selected week, append it (e.g., "Lun 20")
+                // Otherwise keep just the day name (e.g. for days outside the month boundary)
+                const label = dateNum ? `${day} ${dateNum}` : day;
+                return {
+                    week: label,
+                    leads: weeklyTrendMap.get(day)!.leads,
+                    citas: weeklyTrendMap.get(day)!.citas
+                };
+            });
 
             // 6. Monthly Trend Calculation
             const monthlyTrendMap = new Map<string, { leads: number; sqls: number; citas: number }>();
@@ -255,6 +350,7 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
                     totalLeads,
                     leadsInteresados,
                     citasAgendadas,
+                    deseaCreditoCount,
                     noCalifican,
                     tasaAgendamiento,
                     tasaDescarte,

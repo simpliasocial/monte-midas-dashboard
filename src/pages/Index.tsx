@@ -1,4 +1,4 @@
-import { Users, Target, Calendar, TrendingUp, Zap, Database, Clock, MessageSquare, AlertTriangle, CheckCircle, Filter, BarChart3, LogOut } from "lucide-react";
+import { Users, Target, Calendar, TrendingUp, Zap, Database, Clock, MessageSquare, AlertTriangle, CheckCircle, Filter, BarChart3, LogOut, DollarSign } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -53,6 +53,10 @@ const Index = () => {
   }
 
   const { kpis, funnelData, recentAppointments, channelData, weeklyTrend, monthlyTrend, disqualificationReasons, dataCapture, responseTime } = data;
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('es-US', { style: 'currency', currency: 'USD' }).format(value);
+  };
 
   const periodLabel = selectedMonth
     ? selectedMonth.toLocaleString('es-ES', { month: 'long', year: 'numeric' })
@@ -154,6 +158,22 @@ const Index = () => {
           subtitle={periodLabel}
           icon={TrendingUp}
           variant="accent"
+          size="lg"
+        />
+        <KPICard
+          title="Ganancia Mensual"
+          value={formatCurrency(kpis.gananciaMensual)}
+          subtitle={periodLabel}
+          icon={DollarSign}
+          variant="success"
+          size="lg"
+        />
+        <KPICard
+          title="Ganancia Total"
+          value={formatCurrency(kpis.gananciaTotal)}
+          subtitle="Histórico Total"
+          icon={DollarSign}
+          variant="primary"
           size="lg"
         />
       </div>

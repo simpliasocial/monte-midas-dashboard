@@ -13,7 +13,9 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
             noCalifican: 0,
             tasaAgendamiento: 0,
             tasaDescarte: 0,
-            tasaRespuesta: 0
+            tasaRespuesta: 0,
+            gananciaMensual: 0,
+            gananciaTotal: 0
         },
         funnelData: [] as any[],
         recentAppointments: [] as any[],
@@ -31,6 +33,7 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
     });
 
     const fetchData = async () => {
+        setLoading(true);
         try {
             // 1. Determine Global Filter Range (for KPIs, Funnel, etc.)
             let globalStart: Date;
@@ -86,11 +89,42 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
                 }
             }
 
+            // Helper to parse "monto_operacion"
+            const parseMonto = (val: any): number => {
+                if (!val) return 0;
+                // Remove non-numeric characters except dot and comma
+                // Check format. If like "1,000.00" or "$1000", remove $ and ,
+                // If "1.000,00" (European), might need heuristic, but assuming standard float-like or US currency for now based on user context.
+                // Safest: Replace everything not 0-9 or .
+                const clean = val.toString().replace(/[^0-9.]/g, '');
+                const num = parseFloat(clean);
+                return isNaN(num) ? 0 : num;
+            };
+
+            // Calculate Total Profit (Ganancia Total) - All Time
+            const gananciaTotal = allConversationsRaw.reduce((sum, conv) => {
+                const contactAttrs = conv.meta?.sender?.custom_attributes || {};
+                const convAttrs = conv.custom_attributes || {};
+                const montoVal = contactAttrs.monto_operacion || convAttrs.monto_operacion;
+                const monto = parseMonto(montoVal);
+                return sum + monto;
+            }, 0);
+
             // 4. Filter Data for KPIs
             const kpiConversations = allConversationsRaw.filter(conv => {
                 const convDate = new Date(conv.timestamp * 1000);
                 return convDate >= globalStart && convDate <= globalEnd;
             });
+
+            // Calculate Monthly/Period Profit (Ganancia Mensual) - Filtered
+            const gananciaMensual = kpiConversations.reduce((sum, conv) => {
+                const contactAttrs = conv.meta?.sender?.custom_attributes || {};
+                const convAttrs = conv.custom_attributes || {};
+                const montoVal = contactAttrs.monto_operacion || convAttrs.monto_operacion;
+                const monto = parseMonto(montoVal);
+                return sum + monto;
+            }, 0);
+
 
             // Calculate KPIs from filtered data
             const totalLeads = kpiConversations.length;
@@ -116,6 +150,7 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
             const tasaRespuesta = totalLeads > 0 ? Math.round((interactedConversations / totalLeads) * 100) : 0;
 
             // Recent Appointments (from filtered data)
+
             const recentAppointments = kpiConversations
                 .filter(c => c.labels && c.labels.includes('agenda_cita'))
                 .slice(0, 5)
@@ -354,7 +389,9 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
                     noCalifican,
                     tasaAgendamiento,
                     tasaDescarte,
-                    tasaRespuesta
+                    tasaRespuesta,
+                    gananciaMensual,
+                    gananciaTotal
                 },
                 funnelData,
                 recentAppointments,

@@ -344,17 +344,11 @@ const Index = () => {
         >
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="p-4 rounded-lg bg-secondary/50 text-center">
-              <div className="p-4 rounded-lg bg-secondary/50 text-center">
-                <p className="text-2xl font-bold text-primary font-display">0</p>
-                <p className="text-xs text-muted-foreground">Mensajes/Conversación</p>
-              </div>
+              <p className="text-2xl font-bold text-primary font-display">0</p>
               <p className="text-xs text-muted-foreground">Mensajes/Conversación</p>
             </div>
             <div className="p-4 rounded-lg bg-secondary/50 text-center">
-              <div className="p-4 rounded-lg bg-secondary/50 text-center">
-                <p className="text-2xl font-bold text-success font-display">100%</p>
-                <p className="text-xs text-muted-foreground">Uptime</p>
-              </div>
+              <p className="text-2xl font-bold text-success font-display">100%</p>
               <p className="text-xs text-muted-foreground">Uptime</p>
             </div>
             <div className="p-4 rounded-lg bg-secondary/50 text-center">
@@ -362,10 +356,7 @@ const Index = () => {
               <p className="text-xs text-muted-foreground">Errores del Agente</p>
             </div>
             <div className="p-4 rounded-lg bg-secondary/50 text-center">
-              <div className="p-4 rounded-lg bg-secondary/50 text-center">
-                <p className="text-2xl font-bold text-primary font-display">0%</p>
-                <p className="text-xs text-muted-foreground">Tasa de Error</p>
-              </div>
+              <p className="text-2xl font-bold text-primary font-display">0%</p>
               <p className="text-xs text-muted-foreground">Tasa de Error</p>
             </div>
           </div>
@@ -389,11 +380,7 @@ const Index = () => {
         subtitle={`Evolución - ${trendPeriodLabel}`}
         icon={BarChart3}
       >
-        <TrendChart
-          data={monthlyTrend}
-          selectedMonth={selectedMonth}
-          onMonthChange={setSelectedMonth}
-        />
+        <TrendChart data={monthlyTrend} />
         <div className="mt-4 flex items-center justify-center gap-8">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-primary" />

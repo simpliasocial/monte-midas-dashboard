@@ -15,6 +15,9 @@ export interface ChatwootConversation {
             email: string;
             phone_number: string;
             thumbnail: string;
+            custom_attributes?: {
+                [key: string]: any;
+            };
         };
     };
     labels: string[];
@@ -23,6 +26,8 @@ export interface ChatwootConversation {
         created_at: number;
     };
     timestamp: number;
+    created_at?: number;
+    first_reply_created_at?: number;
     custom_attributes?: {
         [key: string]: any;
     };

@@ -101,7 +101,20 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
                 return isNaN(num) ? 0 : num;
             };
 
-            // Calculate Total Profit (Ganancia Total) - All Time
+            // Helper to parse fecha_monto_operacion
+            const parseFechaMontoOperacion = (val: any): Date | null => {
+                if (!val) return null;
+                try {
+                    // Handle different date formats
+                    // Expected format: "2026-02-05" or ISO date string
+                    const date = new Date(val);
+                    return isNaN(date.getTime()) ? null : date;
+                } catch {
+                    return null;
+                }
+            };
+
+            // Calculate Total Profit (Ganancia Total) - All Time (No date filtering)
             const gananciaTotal = allConversationsRaw.reduce((sum, conv) => {
                 const contactAttrs = conv.meta?.sender?.custom_attributes || {};
                 const convAttrs = conv.custom_attributes || {};
@@ -116,14 +129,39 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
                 return convDate >= globalStart && convDate <= globalEnd;
             });
 
-            // Calculate Monthly/Period Profit (Ganancia Mensual) - Filtered
-            const gananciaMensual = kpiConversations.reduce((sum, conv) => {
+            // Calculate Monthly/Period Profit (Ganancia Mensual) - Filtered by fecha_monto_operacion
+            let gananciaMensual = 0;
+            let includedCount = 0;
+            let excludedCount = 0;
+
+            allConversationsRaw.forEach(conv => {
                 const contactAttrs = conv.meta?.sender?.custom_attributes || {};
                 const convAttrs = conv.custom_attributes || {};
                 const montoVal = contactAttrs.monto_operacion || convAttrs.monto_operacion;
+                const fechaMontoVal = contactAttrs.fecha_monto_operacion || convAttrs.fecha_monto_operacion;
+
                 const monto = parseMonto(montoVal);
-                return sum + monto;
-            }, 0);
+                const fechaMonto = parseFechaMontoOperacion(fechaMontoVal);
+
+                // Only include if:
+                // 1. Has a valid monto_operacion
+                // 2. Has a valid fecha_monto_operacion
+                // 3. fecha_monto_operacion falls within the selected period
+                if (monto > 0 && fechaMonto) {
+                    if (fechaMonto >= globalStart && fechaMonto <= globalEnd) {
+                        gananciaMensual += monto;
+                        includedCount++;
+                    } else {
+                        excludedCount++;
+                    }
+                } else if (monto > 0 && !fechaMonto) {
+                    excludedCount++;
+                }
+            });
+
+            // Only log summary once per data fetch
+            console.log(`💰 Revenue Summary - Total: $${gananciaTotal} | Period: $${gananciaMensual} (${includedCount} included, ${excludedCount} excluded)`);
+
 
 
             // Calculate KPIs from filtered data
@@ -176,12 +214,7 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
                 { label: "No Aplica", value: noAplicaCount, percentage: totalLeads > 0 ? Math.round((noAplicaCount / totalLeads) * 100) : 0, color: "hsl(0, 0%, 60%)" },
             ];
 
-            // Debugging: Log all unique labels found to help verify KPIs
-            const allLabels = new Set<string>();
-            kpiConversations.forEach(c => c.labels?.forEach(l => allLabels.add(l)));
-            console.log('Unique Labels Found in Dashboard Data:', Array.from(allLabels));
-            console.log('Total Leads:', totalLeads);
-            console.log('Leads Interesados Count:', leadsInteresados);
+            // Labels are tracked internally - no verbose logging needed
 
             // Channel Breakdown
             // Fetch inboxes to map IDs to Names/Types
@@ -378,7 +411,30 @@ export const useDashboardData = (selectedMonth: Date | null = null, selectedWeek
                 funnelDropoff: 0
             };
 
-            const responseTime = 0;
+            // Calculate Response Time (Average time to first agent response)
+            // Using first_reply_created_at from Chatwoot conversation metadata
+            let totalResponseTime = 0;
+            let conversationsWithResponse = 0;
+
+            kpiConversations.forEach(conv => {
+                // Chatwoot provides first_reply_created_at timestamp
+                if (conv.first_reply_created_at) {
+                    // Calculate time difference in minutes
+                    const convCreatedAt = conv.created_at || conv.timestamp; // Unix timestamp in seconds
+                    const firstResponseAt = conv.first_reply_created_at; // Unix timestamp in seconds
+                    const responseTimeMinutes = (firstResponseAt - convCreatedAt) / 60;
+
+                    // Only count positive response times (agent responded after conversation started)
+                    if (responseTimeMinutes > 0 && responseTimeMinutes < 1440) { // Less than 24 hours
+                        totalResponseTime += responseTimeMinutes;
+                        conversationsWithResponse++;
+                    }
+                }
+            });
+
+            const responseTime = conversationsWithResponse > 0
+                ? Math.round(totalResponseTime / conversationsWithResponse)
+                : 0;
 
             setData({
                 kpis: {

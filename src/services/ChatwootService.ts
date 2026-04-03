@@ -42,6 +42,7 @@ export const chatwootService = {
         since?: string; // ISO date string
         until?: string; // ISO date string
         labels?: string[];
+        assignee_type?: string;
     } = {}): Promise<{ payload: ChatwootConversation[]; meta: any }> => {
         try {
             // If 'q' is present, we perform a Contact Search first to find the specific person
@@ -97,15 +98,18 @@ export const chatwootService = {
                     api_access_token: API_TOKEN,
                 },
                 params: {
-                    page: params.page || 1,
-                    status: 'all', // Always fetch all status as requested
-                    sort_by: params.sort_by || 'last_activity_at_desc',
-                    since: params.since, // Added missing parameter
-                    until: params.until,
-                    labels: params.labels ? params.labels.join(',') : undefined,
+                    ...(params.page ? { page: params.page } : {}),
+                    ...(params.status ? { status: params.status } : {}),
                 },
+                timeout: 90000, // 90 second timeout (increased for reliability)
             });
-            return response.data.data; // Returns { payload: [], meta: {} }
+
+            // Chatwoot API returns { data: { payload: [], meta: {} } }
+            const responseData = response.data?.data || response.data || {};
+            const payload = responseData.payload || [];
+            const meta = responseData.meta || { all_count: payload.length };
+
+            return { payload, meta };
         } catch (error) {
             console.error('Error fetching Chatwoot conversations:', error);
             throw error;

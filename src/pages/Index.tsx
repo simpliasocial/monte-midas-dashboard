@@ -34,20 +34,55 @@ const ALL_TIME_VALUE = "-1";
 const Index = () => {
   const [selectedMonth, setSelectedMonth] = useState<Date | null>(null); // null means "All Time"
   const [selectedWeek, setSelectedWeek] = useState<string>("1");
-  const { loading, error, data } = useDashboardData(selectedMonth, selectedWeek);
+  const { loading, error, data, progress } = useDashboardData(selectedMonth, selectedWeek);
 
-  if (loading) {
+  // Only show FULL SCREEN loader if we have NO data at all (first load ever)
+  if (loading && data.kpis.totalLeads === 0) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex flex-col items-center justify-center min-h-screen gap-6 p-4">
+        <div className="relative">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-[10px] font-bold text-primary">{progress.percentage}%</span>
+          </div>
+        </div>
+        <div className="text-center space-y-2">
+          <h3 className="text-xl font-semibold text-foreground">Preparando tu Dashboard</h3>
+          <p className="text-muted-foreground max-w-xs mx-auto">
+            Estamos descargando miles de conversaciones desde Chatwoot por primera vez.
+          </p>
+          <div className="flex items-center justify-center gap-2 mt-4 px-3 py-1 bg-secondary/50 rounded-full text-xs font-medium text-primary">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+            </span>
+            {progress.phase}
+          </div>
+        </div>
+        <div className="w-full max-w-xs h-1.5 bg-secondary rounded-full overflow-hidden">
+          <div
+            className="h-full bg-primary transition-all duration-700"
+            style={{ width: `${progress.percentage}%` }}
+          />
+        </div>
+        <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
+          Railway API • Latencia Alta • Optimizando Carga
+        </p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen text-red-500">
-        Error loading dashboard data: {error}
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4 text-center">
+        <div className="text-red-500 font-semibold text-lg">Error cargando datos del dashboard</div>
+        <div className="text-muted-foreground text-sm max-w-md">{error}</div>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90"
+        >
+          Reintentar
+        </button>
       </div>
     );
   }
@@ -69,7 +104,15 @@ const Index = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+          {progress.isSyncing && (
+            <div className="flex items-center gap-2 px-2 py-0.5 bg-primary/10 border border-primary/20 rounded-md animate-pulse">
+              <Loader2 className="h-3 w-3 animate-spin text-primary" />
+              <span className="text-[10px] font-semibold text-primary uppercase tracking-tighter">Sincronizando</span>
+            </div>
+          )}
+        </div>
         <div className="flex items-center gap-4">
           <Select
             value={selectedMonth ? selectedMonth.getMonth().toString() : ALL_TIME_VALUE}

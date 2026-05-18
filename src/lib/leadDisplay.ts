@@ -1,0 +1,446 @@
+import { config } from "@/config";
+import type { ConversationMessage, Inbox, LeadLike } from "@/domain/lead";
+import { asRecord } from "@/domain/common/types";
+import { resolveLeadAttributes } from "@/domain/lead";
+
+type LeadDisplayInput = Partial<LeadLike> & {
+    additional_attributes?: unknown;
+    channel?: unknown;
+    channel_name?: unknown;
+    channel_type?: unknown;
+    last_message?: unknown;
+    name?: unknown;
+    raw_payload?: unknown;
+};
+
+type InboxDisplayInput = Partial<Inbox> & {
+    channel?: unknown;
+};
+
+type MessageDisplayInput = Partial<ConversationMessage> & {
+    attachment?: unknown;
+    direction?: unknown;
+};
+
+export const cleanText = (value: unknown) => String(value ?? "").trim();
+
+export const normalize = (value: unknown) =>
+    String(value || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
+
+export const parseAmount = (value: unknown) => {
+    const raw = String(value || "").trim();
+    const normalized = raw.includes(",") && !raw.includes(".")
+        ? raw.replace(",", ".")
+        : raw.replace(/,/g, "");
+    const parsed = Number.parseFloat(normalized.replace(/[^0-9.-]/g, ""));
+    return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+export const money = (value: number) =>
+    new Intl.NumberFormat("es-US", { style: "currency", currency: "USD" }).format(value);
+
+export const getAttrs = resolveLeadAttributes;
+
+export const getLeadName = (lead: LeadDisplayInput) => {
+    const attrs = getAttrs(lead);
+    const customName = cleanText(attrs.nombre_completo);
+    return customName || cleanText(lead?.meta?.sender?.name) || cleanText(lead?.name) || "Sin Nombre";
+};
+
+export const getRawLeadPhone = (lead: LeadDisplayInput) =>
+    cleanText(lead?.meta?.sender?.phone_number);
+
+const CHANNEL_ALIAS_LABELS: Array<{ label: string; tokens: string[] }> = [
+    { label: "WhatsApp", tokens: ["whatsapp", "whats app", "wa.me"] },
+    { label: "Instagram", tokens: ["instagram"] },
+    { label: "Facebook", tokens: ["facebook", "messenger"] },
+    { label: "Telegram", tokens: ["telegram", "t.me", "tg://", "cwcloudbot_bot"] },
+    { label: "TikTok", tokens: ["tiktok", "tik tok", "douyin", "simplia.social"] },
+    { label: "Sitio web", tokens: ["webwidget", "web_widget", "web widget", "website", "web site", "sitio web", "pagina web", "página web", "livechat", "live chat", "widget"] }
+];
+
+const resolveSocialChannelLabel = (value: unknown) => {
+    const normalizedValue = normalize(value);
+    if (!normalizedValue) return "";
+
+    const matched = CHANNEL_ALIAS_LABELS.find(({ tokens }) =>
+        tokens.some(token => normalizedValue.includes(token))
+    );
+
+    return matched?.label || "";
+};
+
+export const getInboxChannelName = (inbox?: InboxDisplayInput | null) => {
+    const channel = asRecord(inbox?.channel);
+    return channelLabelFromType(
+        cleanText(inbox?.channel_type),
+        [
+            inbox?.name,
+            inbox?.provider,
+            inbox?.slug,
+            inbox?.website_url,
+            inbox?.website_token,
+            channel.type
+        ].filter(Boolean).join(" ")
+    );
+};
+
+export const isWhatsappChannel = (lead: LeadDisplayInput, channelOverride = "") => {
+    return channelLabelFromType(
+        cleanText(lead?.channel_type),
+        `${cleanText(lead?.channel)} ${channelOverride}`
+    ) === "WhatsApp";
+};
+
+export const getLeadPhone = (lead: LeadDisplayInput, channelOverride = "") => {
+    const attrs = getAttrs(lead);
+    const customPhone = cleanText(attrs.celular);
+    if (customPhone) return customPhone;
+    return isWhatsappChannel(lead, channelOverride) ? getRawLeadPhone(lead) : "";
+};
+
+export const getLeadEmail = (lead: LeadDisplayInput) => {
+    const attrs = getAttrs(lead);
+    return cleanText(attrs.correo) || cleanText(lead?.meta?.sender?.email);
+};
+
+export const getLeadOperationDate = (lead: LeadDisplayInput) => {
+    const attrs = getAttrs(lead);
+    const raw = cleanText(attrs.fecha_monto_operacion);
+    if (!raw) return "";
+    const date = new Date(raw);
+    if (!Number.isNaN(date.getTime())) return date.toISOString().split("T")[0];
+    return raw.split("T")[0];
+};
+
+export const operationDateToIso = (date: string) =>
+    date ? new Date(`${date}T00:00:00.000-05:00`).toISOString() : null;
+
+export const toUnixSeconds = (value: unknown) => {
+    if (!value) return 0;
+    const numeric = Number(value);
+    if (!Number.isNaN(numeric)) return numeric < 10000000000 ? numeric : Math.floor(numeric / 1000);
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime()) ? 0 : Math.floor(date.getTime() / 1000);
+};
+
+export const formatDateTime = (value: unknown) => {
+    const unix = toUnixSeconds(value);
+    if (!unix) return "Sin fecha";
+    return new Date(unix * 1000).toLocaleString("es-EC", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+};
+
+const getMessageNumericType = (message?: MessageDisplayInput | null) => {
+    const numeric = Number(message?.message_type);
+    if (!Number.isNaN(numeric)) return numeric;
+
+    const normalizedType = normalize(message?.message_type);
+    if (normalizedType === "incoming") return 0;
+    if (normalizedType === "outgoing") return 1;
+    if (normalizedType === "activity") return 2;
+
+    return null;
+};
+
+const hasRenderableMessagePayload = (message?: MessageDisplayInput | null) => {
+    const contentAttributes = asRecord(message?.content_attributes);
+    if (cleanText(message?.content)) return true;
+    if (Array.isArray(message?.attachments) && message.attachments.length > 0) return true;
+    if (Array.isArray(message?.attachment) && message.attachment.length > 0) return true;
+    if (Array.isArray(contentAttributes.attachments) && contentAttributes.attachments.length > 0) return true;
+    return false;
+};
+
+export const getConversationMessageRole = (messageValue?: unknown): "incoming" | "outgoing" | null => {
+    const message = asRecord(messageValue) as MessageDisplayInput;
+    if (!message) return null;
+    if (message?.is_private === true || message?.private === true) return null;
+
+    const sender = asRecord(message.sender);
+    const direction = normalize(message?.message_direction || message?.direction);
+    const senderType = normalize(message?.sender_type || sender.type || sender.sender_type);
+    const contentType = normalize(message?.content_type);
+    const numericType = getMessageNumericType(message);
+
+    if (!hasRenderableMessagePayload(message)) return null;
+    if (direction.includes("activity") || contentType.includes("activity") || numericType === 2) return null;
+
+    if (direction === "incoming") return "incoming";
+    if (direction === "outgoing") return "outgoing";
+
+    if (numericType === 0) return "incoming";
+    if (numericType === 1) return "outgoing";
+
+    if (senderType.includes("contact")) return "incoming";
+    if (["agent", "user", "administrator", "bot"].some(token => senderType.includes(token))) return "outgoing";
+
+    return null;
+};
+
+export const isRenderableConversationMessage = (message: unknown): message is MessageDisplayInput =>
+    getConversationMessageRole(message) !== null;
+
+export const getDisplayMessages = (messages: unknown[] = []) =>
+    (messages || [])
+        .map((message) => asRecord(message) as MessageDisplayInput)
+        .filter(isRenderableConversationMessage)
+        .sort((a, b) => toUnixSeconds(a?.created_at || a?.created_at_chatwoot) - toUnixSeconds(b?.created_at || b?.created_at_chatwoot));
+
+export const getMessageText = (messageValue: unknown) => {
+    const message = asRecord(messageValue);
+    if (!message) return "";
+    return cleanText(message?.content) || "[Adjunto / contenido no textual]";
+};
+
+export const getLastMessage = (lead: LeadDisplayInput) => {
+    const displayMessages = getDisplayMessages(Array.isArray(lead?.messages) ? lead.messages : []);
+    if (displayMessages.length > 0) return displayMessages[displayMessages.length - 1];
+    if (isRenderableConversationMessage(lead?.last_non_activity_message)) return lead.last_non_activity_message;
+    if (isRenderableConversationMessage(lead?.last_message)) return lead.last_message;
+    return null;
+};
+
+export const getMessagePreview = (lead: LeadDisplayInput) =>
+    getMessageText(getLastMessage(lead)) || "Sin mensajes";
+
+export const getMessageTimestamp = (lead: LeadDisplayInput) =>
+    getLastMessage(lead)?.created_at || lead?.timestamp || lead?.created_at;
+
+export const getChatwootUrl = (conversationId: number | string) => {
+    const numericId = Number(conversationId);
+    if (!Number.isFinite(numericId) || numericId <= 0) return "";
+    return `${config.chatwoot.publicUrl}/app/accounts/${config.chatwoot.accountId}/conversations/${conversationId}`;
+};
+
+export const getInitials = (name: string) =>
+    cleanText(name)
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map(part => part[0])
+        .join("")
+        .toUpperCase() || "LD";
+
+export const channelLabelFromType = (type?: string, fallback?: string) => {
+    const resolvedFromType = resolveSocialChannelLabel(type);
+    if (resolvedFromType) return resolvedFromType;
+
+    const resolvedFromFallback = resolveSocialChannelLabel(fallback);
+    if (resolvedFromFallback) return resolvedFromFallback;
+
+    const normalizedType = normalize(type);
+    if (normalizedType.includes("api")) {
+        const resolvedApiFallback = resolveSocialChannelLabel(fallback);
+        if (resolvedApiFallback) return resolvedApiFallback;
+    }
+
+    return "Otro";
+};
+
+export const getLeadChannelName = (lead: LeadDisplayInput, inbox?: InboxDisplayInput | null) => {
+    const attrs = getAttrs(lead);
+    const senderAdditional = asRecord(lead?.meta?.sender?.additional_attributes);
+    const fallbackHints = [
+        attrs.canal,
+        lead?.channel,
+        lead?.channel_name,
+        lead?.source,
+        senderAdditional.channel,
+        senderAdditional.social_channel,
+        senderAdditional.provider,
+        senderAdditional.platform,
+        senderAdditional.source,
+        senderAdditional.service,
+        senderAdditional.channel_type,
+        lead?.meta?.sender?.identifier,
+        getInboxChannelName(inbox),
+        inbox?.name
+    ].filter(Boolean).join(" ");
+
+    return channelLabelFromType(cleanText(lead?.channel_type || inbox?.channel_type), fallbackHints);
+};
+
+export const getLeadInboxName = (lead: LeadDisplayInput, inbox?: InboxDisplayInput | null) =>
+    cleanText(inbox?.name || lead?.channel);
+
+const shouldInspectUrlKey = (key: string) => {
+    const normalized = normalize(key);
+    return ["url", "link", "profile", "perfil", "source", "refer", "redirect", "social", "instagram", "facebook", "messenger"].some(token => normalized.includes(token));
+};
+
+const shouldSkipUrlKey = (key: string) => {
+    const normalized = normalize(key);
+    return ["avatar", "thumbnail", "image", "photo", "picture"].some(token => normalized.includes(token));
+};
+
+const normalizeUrl = (value: unknown) => {
+    const raw = cleanText(value);
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    if (/^www\./i.test(raw)) return `https://${raw}`;
+    return "";
+};
+
+const normalizeTelegramHandle = (value: unknown) => {
+    let raw = cleanText(value);
+    if (!raw) return "";
+
+    raw = raw
+        .replace(/^https?:\/\/(www\.)?(t\.me|telegram\.me)\//i, "")
+        .replace(/^tg:\/\/resolve\?domain=/i, "")
+        .replace(/^@/, "")
+        .split(/[/?#&]/)[0]
+        .trim();
+
+    return /^[a-zA-Z][a-zA-Z0-9_]{4,31}$/.test(raw) ? raw : "";
+};
+
+const findTextByKeys = (value: unknown, keys: string[], depth = 0, visited = new Set<unknown>()): string => {
+    if (!value || depth > 5 || visited.has(value)) return "";
+    if (typeof value === "string" || typeof value === "number") return "";
+    if (typeof value !== "object") return "";
+
+    visited.add(value);
+    const entries = Object.entries(value as Record<string, unknown>);
+
+    for (const [key, child] of entries) {
+        const normalizedKey = normalize(key);
+        if (!keys.some(candidate => normalizedKey.includes(candidate))) continue;
+        if (typeof child === "string" || typeof child === "number") {
+            const text = cleanText(child);
+            if (text) return text;
+        }
+        const nested = findTextByKeys(child, keys, depth + 1, visited);
+        if (nested) return nested;
+    }
+
+    for (const [, child] of entries) {
+        const nested = findTextByKeys(child, keys, depth + 1, visited);
+        if (nested) return nested;
+    }
+
+    return "";
+};
+
+const isChatwootUrl = (url: string) => {
+    try {
+        const chatwootHost = new URL(config.chatwoot.publicUrl).hostname;
+        return new URL(url).hostname.includes(chatwootHost);
+    } catch {
+        return false;
+    }
+};
+
+const findExternalUrl = (value: unknown, depth = 0, visited = new Set<unknown>()): string => {
+    if (!value || depth > 4 || visited.has(value)) return "";
+
+    if (typeof value === "string") {
+        const url = normalizeUrl(value);
+        return url && !isChatwootUrl(url) ? url : "";
+    }
+
+    if (typeof value !== "object") return "";
+    visited.add(value);
+
+    const entries = Object.entries(value as Record<string, unknown>);
+    for (const [key, child] of entries) {
+        if (shouldSkipUrlKey(key)) continue;
+        if (!shouldInspectUrlKey(key)) continue;
+        const url = findExternalUrl(child, depth + 1, visited);
+        if (url) return url;
+    }
+
+    for (const [key, child] of entries) {
+        if (shouldSkipUrlKey(key) || typeof child !== "object") continue;
+        const url = findExternalUrl(child, depth + 1, visited);
+        if (url) return url;
+    }
+
+    return "";
+};
+
+const constructSocialUrl = (channel: string, identifier: unknown) => {
+    if (!identifier) return "";
+    const cleanId = identifier.toString().trim().replace(/^@/, "");
+
+    switch (channel.toLowerCase()) {
+        case "tiktok":
+            return cleanId.startsWith("http") ? cleanId : `https://www.tiktok.com/@${cleanId}`;
+        case "instagram":
+            return cleanId.startsWith("http") ? cleanId : `https://www.instagram.com/${cleanId}`;
+        case "facebook":
+        case "messenger":
+            return cleanId.startsWith("http") ? cleanId : `https://facebook.com/${cleanId}`;
+        case "telegram":
+            return cleanId.startsWith("http") ? cleanId : `https://t.me/${cleanId}`;
+        default:
+            return "";
+    }
+};
+
+export const getLeadExternalUrl = (lead: LeadDisplayInput, channelOverride = "") => {
+    const profileUrl = cleanText(lead?.perfil_url);
+    if (profileUrl) return profileUrl;
+
+    const sender = asRecord(lead?.meta?.sender);
+    const attrs = getAttrs(lead as any);
+    const channelName = getLeadChannelName(lead);
+    const channelHint = normalize(`${channelOverride} ${lead?.channel_type || ""} ${lead?.channel || ""} ${attrs.canal || ""} ${channelName}`);
+
+    const searchable = {
+        custom_attributes: attrs,
+        additional_attributes: asRecord(lead?.additional_attributes || sender.additional_attributes),
+        sender,
+        meta: asRecord(lead?.meta),
+        raw_payload: asRecord(lead?.raw_payload)
+    };
+
+    // 1. Try to find an explicit URL already in the data
+    const explicitUrl = findExternalUrl(searchable);
+    if (explicitUrl) return explicitUrl;
+
+    // 2. Constructed URLs based on channel
+    if (channelHint.includes("telegram")) {
+        const telegramHandle =
+            normalizeTelegramHandle(sender.identifier) ||
+            normalizeTelegramHandle(sender.username) ||
+            normalizeTelegramHandle(findTextByKeys(searchable, ["telegram", "username", "user_name", "handle", "identifier"]));
+
+        return telegramHandle ? `https://t.me/${telegramHandle}` : "";
+    }
+
+    if (channelHint.includes("whatsapp") || channelHint.includes("wa.me")) {
+        const phone = getLeadPhone(lead, channelOverride).replace(/\D/g, "");
+        return phone ? `https://wa.me/${phone}` : "";
+    }
+
+    if (channelHint.includes("tiktok")) {
+        const tiktokId = findTextByKeys(searchable, ["tiktok", "screen_name", "identifier", "username"]) || sender.identifier || sender.name;
+        return constructSocialUrl("tiktok", tiktokId);
+    }
+
+    if (channelHint.includes("instagram")) {
+        const instaId = findTextByKeys(searchable, ["instagram", "screen_name", "identifier", "username"]) || sender.identifier || sender.name;
+        return constructSocialUrl("instagram", instaId);
+    }
+
+    if (channelHint.includes("facebook") || channelHint.includes("messenger")) {
+        const fbUrl = findTextByKeys(searchable, ["facebook", "page_link", "profile_link", "perfil", "link", "url"]);
+        if (fbUrl && /^https?:\/\//i.test(fbUrl)) return fbUrl;
+
+        const fbId = findTextByKeys(searchable, ["social_id", "facebook_id", "external_id", "identifier"]) || sender.identifier;
+        if (fbId) return constructSocialUrl("facebook", fbId);
+    }
+
+    return "";
+};

@@ -1,0 +1,143 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Simplia Corporate Colors */
+    --background: 220 20% 97%;
+    --foreground: 222 47% 20%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 20%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 20%;
+
+    /* Simplia Blue #203885 */
+    --primary: 224 62% 32%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Light blue for secondary */
+    --secondary: 220 30% 96%;
+    --secondary-foreground: 224 62% 32%;
+
+    --muted: 220 20% 94%;
+    --muted-foreground: 220 10% 50%;
+
+    /* Yellow accent */
+    --accent: 45 93% 58%;
+    --accent-foreground: 222 47% 15%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Status colors */
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 220 20% 90%;
+    --input: 220 20% 90%;
+    --ring: 224 62% 32%;
+
+    --radius: 0.75rem;
+
+    /* Funnel colors */
+    --funnel-1: 224 62% 32%;
+    --funnel-2: 224 55% 45%;
+    --funnel-3: 220 30% 65%;
+    --funnel-4: 142 60% 45%;
+    --funnel-5: 45 93% 58%;
+
+    /* Chart colors */
+    --chart-1: 224 62% 32%;
+    --chart-2: 45 93% 58%;
+    --chart-3: 142 71% 45%;
+    --chart-4: 220 30% 60%;
+    --chart-5: 0 72% 51%;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 45 93% 58%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 45 93% 58%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 45 93% 58%;
+
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-sm border border-border/50 shadow-lg;
+  }
+
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(224 55% 45%) 100%);
+  }
+
+  .gradient-accent {
+    background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(38 92% 50%) 100%);
+  }
+
+  .shadow-card {
+    box-shadow: 0 4px 20px -4px hsl(var(--primary) / 0.08), 0 2px 8px -2px hsl(var(--primary) / 0.04);
+  }
+
+  .shadow-card-hover {
+    box-shadow: 0 8px 30px -4px hsl(var(--primary) / 0.12), 0 4px 12px -2px hsl(var(--primary) / 0.06);
+  }
+}

@@ -1,0 +1,12 @@
+{
+    "rewrites": [
+        {
+            "source": "/chatwoot-api/:path*",
+            "destination": "https://app.chatwoot.com/:path*"
+        },
+        {
+            "source": "/(.*)",
+            "destination": "/index.html"
+        }
+    ]
+}

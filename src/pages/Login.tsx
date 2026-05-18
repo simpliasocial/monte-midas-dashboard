@@ -1,0 +1,116 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/useAuth';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Lock, User } from 'lucide-react';
+
+const errorMessage = (error: unknown) => {
+    const msg = error instanceof Error ? error.message : (error as { message?: string })?.message || '';
+    if (msg.includes('Invalid login credentials')) return 'Usuario o contraseña incorrectos';
+    if (msg.includes('Email not confirmed')) return 'Verifica tu correo electrónico para iniciar sesión';
+    return msg || 'Error al iniciar sesión. Verifica tus credenciales.';
+};
+
+const Login = () => {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const { signIn } = useAuth();
+    const navigate = useNavigate();
+
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+
+        try {
+            const { error: signInError } = await signIn(username, password);
+
+            if (signInError) throw signInError;
+
+            navigate('/');
+        } catch (err: unknown) {
+            console.error('Login error:', err);
+            setError(errorMessage(err));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 p-4">
+            <Card className="w-full max-w-md border-slate-700 bg-slate-900/50 backdrop-blur-xl text-slate-100 shadow-2xl">
+                <CardHeader className="space-y-1 text-center">
+                    <div className="flex justify-center mb-6">
+                        <div className="p-4 rounded-full bg-primary/10 ring-1 ring-primary/50 shadow-[0_0_15px_-3px_rgba(var(--primary),0.3)]">
+                            <Lock className="w-10 h-10 text-primary" />
+                        </div>
+                    </div>
+                    <CardTitle className="text-3xl font-bold tracking-tight text-primary">Testings</CardTitle>
+                    <CardDescription className="text-slate-400 text-lg">
+                        Panel de Control
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {error && (
+                        <div className="mb-4 p-3 rounded-md bg-red-500/10 border border-red-500/50 text-red-500 text-sm font-medium text-center animate-in fade-in zoom-in-95 duration-200">
+                            {error}
+                        </div>
+                    )}
+                    <form onSubmit={handleLogin} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="username">Usuario</Label>
+                            <div className="relative">
+                                <User className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                                <Input
+                                    id="username"
+                                    placeholder="Usuario"
+                                    type="text"
+                                    autoCapitalize="none"
+                                    autoCorrect="off"
+                                    disabled={loading}
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    className="pl-10 bg-slate-800/50 border-slate-700 focus:border-primary"
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="password">Contraseña</Label>
+                            <div className="relative">
+                                <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
+                                <Input
+                                    id="password"
+                                    placeholder="••••••••"
+                                    type="password"
+                                    autoCapitalize="none"
+                                    autoCorrect="off"
+                                    disabled={loading}
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="pl-10 bg-slate-800/50 border-slate-700 focus:border-primary"
+                                />
+                            </div>
+                        </div>
+                        <Button className="w-full mt-6" type="submit" disabled={loading}>
+                            {loading ? (
+                                <div className="flex items-center gap-2">
+                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                    Verificando...
+                                </div>
+                            ) : (
+                                'Iniciar Sesión'
+                            )}
+                        </Button>
+                    </form>
+                </CardContent>
+            </Card>
+        </div>
+    );
+};
+
+export default Login;

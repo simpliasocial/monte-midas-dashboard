@@ -157,6 +157,55 @@ const labelDelta = (previousLabels: unknown, nextLabels: unknown) => {
     };
 };
 
+const parseDashboardAccountId = (body: Record<string, any>) => {
+    const configured = body.dashboard_account_id ?? Deno.env.get("DASHBOARD_ACCOUNT_ID") ?? 0;
+    const parsed = Number(configured);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const optionalNumber = (value: unknown) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const upsertLabelTitles = async (
+    supabase: ReturnType<typeof createClient>,
+    labels: string[],
+    dashboardAccountId: number,
+    chatwootAccountId: unknown,
+) => {
+    const rows = normalizeLabels(labels)
+        .map((title) => ({
+            account_id: dashboardAccountId,
+            chatwoot_account_id: optionalNumber(chatwootAccountId),
+            title,
+            raw_payload: { source: "chatwoot-repair-conversations", title },
+            last_seen_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        }));
+
+    if (rows.length === 0) return;
+
+    const { error } = await supabase
+        .schema("cw")
+        .from("label_catalog")
+        .upsert(rows, { onConflict: "account_id,normalized_title" });
+
+    if (error) throw error;
+};
+
+const refreshDashboardDiscovery = async (
+    supabase: ReturnType<typeof createClient>,
+    dashboardAccountId: number,
+) => {
+    const { data, error } = await supabase
+        .schema("cw")
+        .rpc("refresh_dashboard_discovery", { target_account_id: dashboardAccountId });
+
+    if (error) throw error;
+    return data;
+};
+
 const uniqueIds = (values: unknown[]) =>
     Array.from(new Set(
         values
@@ -255,6 +304,7 @@ serve(async (req) => {
 
         const supabase = createClient(supabaseUrl, serviceRoleKey);
         const body = await req.json().catch(() => ({}));
+        const dashboardAccountId = parseDashboardAccountId(body);
         const requestedIds = uniqueIds(Array.isArray(body.ids) ? body.ids : []);
         const limit = Math.max(1, Number(body.limit) || DEFAULT_LIMIT);
         const batchSize = Math.max(1, Number(body.batch_size) || DEFAULT_BATCH_SIZE);
@@ -393,12 +443,26 @@ serve(async (req) => {
             if (error) throw error;
         }
 
+        let dashboardDiscovery: unknown = null;
+        try {
+            await upsertLabelTitles(
+                supabase,
+                conversationRows.flatMap((row) => Array.isArray(row.labels) ? row.labels : []),
+                dashboardAccountId,
+                conversationRows.find((row) => row.chatwoot_account_id)?.chatwoot_account_id,
+            );
+            dashboardDiscovery = await refreshDashboardDiscovery(supabase, dashboardAccountId);
+        } catch (discoveryError) {
+            console.warn("Dashboard discovery refresh failed after repair:", discoveryError);
+        }
+
         return new Response(JSON.stringify({
             success: true,
             stats: {
                 requested: idsToRepair.length,
                 repaired: conversationRows.length,
                 label_events: labelEventRows.length,
+                dashboard_discovery: dashboardDiscovery,
             },
         }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },

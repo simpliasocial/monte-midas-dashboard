@@ -11,6 +11,7 @@ export type AiReportBuildParams = {
     rangeLabel: string;
     companyContext?: string;
     filters?: AiReportFilters;
+    tagSettings?: Record<string, unknown>;
     openAiApiKey: string;
     model?: string;
 };
@@ -288,13 +289,35 @@ const resolvedAttrs = (row: Record<string, unknown>) => ({
     ...asRecord(row.resolved_custom_attributes),
 });
 
-const resolveStage = (row: Record<string, unknown>) => {
+const settingsArray = (settings: Record<string, unknown> | undefined, key: string) =>
+    Array.isArray(settings?.[key])
+        ? (settings?.[key] as unknown[]).map(cleanText).filter(Boolean)
+        : [];
+
+const settingsText = (settings: Record<string, unknown> | undefined, key: string) =>
+    cleanText(settings?.[key]);
+
+const hasAnyConfiguredLabel = (
+    normalizedLabels: string[],
+    settings: Record<string, unknown> | undefined,
+    keys: string[],
+    fallback: string[],
+) => {
+    const candidates = [
+        ...fallback,
+        ...keys.flatMap((key) => settingsArray(settings, key)),
+        ...keys.map((key) => settingsText(settings, key)),
+    ].map(normalizeText).filter(Boolean);
+    return normalizedLabels.some((label) => candidates.includes(label));
+};
+
+const resolveStage = (row: Record<string, unknown>, tagSettings?: Record<string, unknown>) => {
     const labels = rowLabels(row).map(normalizeText);
-    if (labels.some((label) => ["venta_exitosa", "venta"].includes(label))) return "Venta";
-    if (labels.some((label) => ["cita_agendada", "cita_agendada_humano", "cita"].includes(label))) return "Cita";
-    if (labels.includes("seguimiento_humano")) return "Seguimiento";
-    if (labels.some((label) => ["interesado", "crear_confianza", "crear_urgencia"].includes(label))) return "SQL";
-    if (labels.some((label) => ["desinteresado", "descartado", "no_calificado", "rechazo", "rechazado"].includes(label))) return "No calificado";
+    if (hasAnyConfiguredLabel(labels, tagSettings, ["saleTags", "humanSaleTargetLabel"], ["venta_exitosa", "venta"])) return "Venta";
+    if (hasAnyConfiguredLabel(labels, tagSettings, ["appointmentTags", "humanSalesQueueTags", "humanAppointmentTargetLabel", "scoreAppointmentLabels"], ["cita_agendada", "cita_agendada_humano", "cita"])) return "Cita";
+    if (hasAnyConfiguredLabel(labels, tagSettings, ["humanFollowupQueueTags"], ["seguimiento_humano"])) return "Seguimiento";
+    if (hasAnyConfiguredLabel(labels, tagSettings, ["sqlTags"], ["interesado", "crear_confianza", "crear_urgencia"])) return "SQL";
+    if (hasAnyConfiguredLabel(labels, tagSettings, ["unqualifiedTags"], ["desinteresado", "descartado", "no_calificado", "rechazo", "rechazado"])) return "No calificado";
     return "Otro";
 };
 
@@ -502,7 +525,7 @@ const hasUnansweredCustomerMessage = (row: Record<string, unknown>) => {
     return firstResponseSeconds(row) === null;
 };
 
-const detailRow = (row: Record<string, unknown>): DetailRow => {
+const detailRow = (row: Record<string, unknown>, tagSettings?: Record<string, unknown>): DetailRow => {
     const attrs = resolvedAttrs(row);
     const score = parseScore(attrs.score ?? attrs.lead_score ?? attrs.puntaje ?? attrs.score_interes ?? row.score_interes);
     const amount = parseAmount(row.monto_operacion ?? attrs.monto_operacion);
@@ -521,7 +544,7 @@ const detailRow = (row: Record<string, unknown>): DetailRow => {
         ciudad: cleanText(firstFieldValue(row, attrs, [...FIELD_GROUPS.city])) || "Sin ciudad registrada",
         responsable: cleanText(attrs.responsable || assignee.name || firstFieldValue(row, attrs, [...FIELD_GROUPS.assignee])) || "Sin responsable asignado",
         estado: cleanText(row.status || row.conversation_status) || "Sin estado",
-        etapa: resolveStage(row),
+        etapa: resolveStage(row, tagSettings),
         etiquetas: rowLabels(row).join(" | ") || "Sin etiquetas",
         puntaje: score === null ? "" : score,
         nivel: scoreBucket(score),
@@ -574,8 +597,9 @@ export const buildAiReportDataset = (params: {
     rangeLabel: string;
     companyContext?: string;
     filters?: AiReportFilters;
+    tagSettings?: Record<string, unknown>;
 }): AiReportDataset => {
-    const details = params.rows.map(detailRow);
+    const details = params.rows.map((row) => detailRow(row, params.tagSettings));
     const availability = buildDataAvailability(params.rows);
     const totalRevenue = details.reduce((sum, row) => sum + Number(row.monto || 0), 0);
     const sales = details.filter((row) => row.etapa === "Venta");
@@ -2154,6 +2178,7 @@ export const renderAiReportFileFromOpenAiResponse = (params: {
     auditEvents?: Record<string, unknown>[];
     companyContext?: string;
     filters?: AiReportFilters;
+    tagSettings?: Record<string, unknown>;
 }): AiReportFile => {
     const profile = AI_REPORT_PROFILES[params.profileKey];
     if (!profile) throw new Error("Perfil de reporte IA no soportado.");
@@ -2168,6 +2193,7 @@ export const renderAiReportFileFromOpenAiResponse = (params: {
         rangeLabel: params.rangeLabel,
         companyContext: params.companyContext,
         filters: params.filters,
+        tagSettings: params.tagSettings,
     });
     const narrative = parseOpenAiReport(params.responseBody, profile.label);
     return renderFile({ profile, profileKey: params.profileKey, format: params.format, rangeLabel: params.rangeLabel, dataset, narrative });
@@ -2189,6 +2215,7 @@ export const createAiReportOpenAiResponse = async (params: AiReportBuildParams &
         rangeLabel: params.rangeLabel,
         companyContext: params.companyContext,
         filters: params.filters,
+        tagSettings: params.tagSettings,
     });
     const prompt = composeAiReportPrompt({
         profile,
@@ -2224,6 +2251,7 @@ export const buildAiReportFile = async (params: AiReportBuildParams): Promise<Ai
         auditEvents: params.auditEvents || [],
         companyContext: params.companyContext,
         filters: params.filters,
+        tagSettings: params.tagSettings,
     });
 };
 

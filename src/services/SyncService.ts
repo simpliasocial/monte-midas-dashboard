@@ -8,7 +8,7 @@ export const SyncService = {
     async bootstrap() {
         console.log('🚀 [Sync] Starting FULL Bootstrap Sync...');
         const runId = await SupabaseSyncService.startSyncRun('bootstrap');
-        const stats = { inboxes: 0, teams: 0, attributes: 0, contacts: 0, conversations: 0, messages: 0 };
+        const stats = { inboxes: 0, labels: 0, teams: 0, attributes: 0, contacts: 0, conversations: 0, messages: 0 };
 
         try {
             // 1. Catalogs
@@ -17,6 +17,11 @@ export const SyncService = {
             await SupabaseSyncService.upsertInboxes(inboxes);
             stats.inboxes = inboxes.length;
             console.log(`✅ [Sync] Inboxes synced: ${stats.inboxes}`);
+
+            const labels = await chatwootService.getLabels();
+            await SupabaseSyncService.upsertLabels(labels);
+            stats.labels = labels.length;
+            console.log(`✅ [Sync] Labels synced: ${stats.labels}`);
 
             const attrDefs = await chatwootService.getAttributeDefinitions();
             if (Array.isArray(attrDefs)) {
@@ -73,6 +78,7 @@ export const SyncService = {
                 if (convPage % 5 === 0) await new Promise(r => setTimeout(r, 1000));
             }
 
+            await SupabaseSyncService.refreshDashboardDiscovery();
             await SupabaseSyncService.endSyncRun(runId, 'success', stats);
             console.log('🏁 [Sync] FULL Bootstrap Sync FINISHED!', stats);
         } catch (err: unknown) {
@@ -132,7 +138,16 @@ export const SyncService = {
             const inboxes = await chatwootService.getInboxes();
             await SupabaseSyncService.upsertInboxes(inboxes);
 
+            const labels = await chatwootService.getLabels();
+            await SupabaseSyncService.upsertLabels(labels);
+
+            const attrDefs = await chatwootService.getAttributeDefinitions();
+            if (Array.isArray(attrDefs) && attrDefs.length > 0) {
+                await SupabaseSyncService.upsertAttributeDefinitions(attrDefs);
+            }
+
             await SupabaseSyncService.updateSyncCursor('daily_delta', since, until);
+            await SupabaseSyncService.refreshDashboardDiscovery();
             await SupabaseSyncService.endSyncRun(runId, 'success', stats);
             console.log('Daily sync finished!', stats);
         } catch (err: unknown) {

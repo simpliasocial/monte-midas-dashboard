@@ -61,24 +61,6 @@ class SupabaseDashboardSettingsRepository implements DashboardSettingsPort {
             console.warn("[Dashboard] Could not load settings from cw schema:", cwError);
         }
 
-        try {
-            const { data, error: publicError } = await supabase
-                .from("dashboard_tag_settings")
-                .select("settings")
-                .eq("account_id", accountId)
-                .maybeSingle();
-
-            if (publicError) throw publicError;
-
-            const normalizedConfig = normalizeRemoteSettings(data as DashboardTagSettingsRow | null);
-            if (normalizedConfig) {
-                persistTagSettingsLocally(normalizedConfig);
-                return normalizedConfig;
-            }
-        } catch (publicError) {
-            console.warn("[Dashboard] Cloud settings load failed, using local/default:", publicError);
-        }
-
         return readLocalTagSettings();
     }
 
@@ -98,21 +80,8 @@ class SupabaseDashboardSettingsRepository implements DashboardSettingsPort {
             if (cwError) throw cwError;
             return;
         } catch (cwError) {
-            console.warn("[Dashboard] cw.dashboard_tag_settings unavailable, falling back to public:", cwError);
-        }
-
-        try {
-            const { error: publicError } = await supabase
-                .from("dashboard_tag_settings")
-                .upsert(
-                    { account_id: accountId, settings: normalizedConfig, updated_at: new Date().toISOString() },
-                    { onConflict: "account_id" },
-                );
-
-            if (publicError) throw publicError;
-        } catch (publicError) {
-            console.error("Failed to save dashboard tag settings:", publicError);
-            throw publicError;
+            console.error("Failed to save dashboard tag settings in cw schema:", cwError);
+            throw cwError;
         }
     }
 }

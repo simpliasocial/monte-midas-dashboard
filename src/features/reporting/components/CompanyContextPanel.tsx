@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Loader2, Settings2 } from "lucide-react";
+import { ChevronDown, Loader2, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/useAuth";
@@ -21,6 +22,7 @@ export function CompanyContextPanel() {
     const { tagSettings, updateTagSettings } = useDashboardContext();
     const [draft, setDraft] = useState(tagSettings.companyContext || "");
     const [saving, setSaving] = useState(false);
+    const [isOpen, setIsOpen] = useState(false);
 
     useEffect(() => {
         setDraft(tagSettings.companyContext || "");
@@ -46,36 +48,53 @@ export function CompanyContextPanel() {
 
     return (
         <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Settings2 className="h-5 w-5 text-primary" />
-                    Configurar contexto empresarial
-                </CardTitle>
-                <CardDescription>
-                    Este contexto se agrega al inicio del prompt de los reportes IA para adaptar el análisis al negocio.
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="space-y-2">
-                    <Label htmlFor="company-report-context">Contexto de la empresa</Label>
-                    <Textarea
-                        id="company-report-context"
-                        value={draft}
-                        onChange={(event) => setDraft(event.target.value)}
-                        placeholder={COMPANY_CONTEXT_PLACEHOLDER}
-                        className="min-h-[220px]"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                        Incluye nombre de empresa, industria, mercado, cliente ideal, oferta, canales comerciales, objetivos, equipo y ciclo de ventas.
-                    </p>
-                </div>
-                <div className="flex justify-end">
-                    <Button onClick={handleSave} disabled={saving || draft.trim() === (tagSettings.companyContext || "").trim()} className="gap-2">
-                        {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                        Guardar contexto
-                    </Button>
-                </div>
-            </CardContent>
+            <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+                <CardHeader className="pb-3">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div className="space-y-1">
+                            <CardTitle className="flex items-center gap-2 text-base">
+                                <Settings2 className="h-5 w-5 text-primary" />
+                                Configurar contexto empresarial
+                            </CardTitle>
+                            {isOpen ? (
+                                <CardDescription>
+                                    Este contexto se agrega al inicio del prompt de los reportes IA para adaptar el análisis al negocio.
+                                </CardDescription>
+                            ) : null}
+                        </div>
+                        <CollapsibleTrigger asChild>
+                            <Button variant="outline" size="sm" className="gap-2 self-start">
+                                {isOpen ? "Ocultar configuración" : "Abrir configuración"}
+                                <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                            </Button>
+                        </CollapsibleTrigger>
+                    </div>
+                </CardHeader>
+
+                <CollapsibleContent>
+                    <CardContent className="space-y-4 pt-0">
+                        <div className="space-y-2">
+                            <Label htmlFor="company-report-context">Contexto de la empresa</Label>
+                            <Textarea
+                                id="company-report-context"
+                                value={draft}
+                                onChange={(event) => setDraft(event.target.value)}
+                                placeholder={COMPANY_CONTEXT_PLACEHOLDER}
+                                className="min-h-[220px]"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Incluye nombre de empresa, industria, mercado, cliente ideal, oferta, canales comerciales, objetivos, equipo y ciclo de ventas.
+                            </p>
+                        </div>
+                        <div className="flex justify-end">
+                            <Button onClick={handleSave} disabled={saving || draft.trim() === (tagSettings.companyContext || "").trim()} className="gap-2">
+                                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                                Guardar contexto
+                            </Button>
+                        </div>
+                    </CardContent>
+                </CollapsibleContent>
+            </Collapsible>
         </Card>
     );
 }

@@ -44,3 +44,7 @@ bun.lockb
 .env
 .env.*
 !.env.example
+
+# Carpetas locales que no se subirán al repo
+archive/
+docs/

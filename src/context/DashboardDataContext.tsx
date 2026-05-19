@@ -42,6 +42,17 @@ type ConversationLabelsRow = {
     labels?: unknown;
 };
 
+type CatalogLabelRow = {
+    title?: unknown;
+};
+
+type AttributeKeyCatalogRow = {
+    attribute_key?: unknown;
+    attribute_scope?: unknown;
+    source_names?: unknown;
+    raw_payload?: unknown;
+};
+
 const isErrorLike = (error: unknown): error is ErrorLike =>
     typeof error === 'object' && error !== null;
 
@@ -142,11 +153,15 @@ export const DashboardDataProvider = ({ children }: { children: ReactNode }) => 
 
     const effectiveLabels = useMemo(
         () => collectKnownLabels({
-            catalogLabels: labels,
+            catalogLabels: [
+                ...labels,
+                ...(tagSettings.availableLabels || []),
+                ...(tagSettings.discoveredLabels || []),
+            ],
             conversations: resolvedConversations,
             labelEvents
         }),
-        [labels, resolvedConversations, labelEvents]
+        [labels, tagSettings.availableLabels, tagSettings.discoveredLabels, resolvedConversations, labelEvents]
     );
 
     const updateTagSettings = useCallback(async (newConfig: TagConfig) => {
@@ -206,6 +221,30 @@ export const DashboardDataProvider = ({ children }: { children: ReactNode }) => 
         }
 
         try {
+            const { data, error: catalogError } = await supabase
+                .schema('cw')
+                .from('label_catalog')
+                .select('title')
+                .eq('account_id', 0)
+                .order('title', { ascending: true });
+
+            if (catalogError) throw catalogError;
+
+            const catalogLabels = Array.from(new Set(
+                ((data || []) as CatalogLabelRow[])
+                    .map((row) => String(row.title || '').trim())
+                    .filter(Boolean)
+            )).sort((a, b) => a.localeCompare(b));
+
+            if (catalogLabels.length > 0) {
+                setLabels(catalogLabels);
+                return;
+            }
+        } catch (catalogError) {
+            console.warn('[Dashboard] Label catalog fallback failed, trying conversations:', catalogError);
+        }
+
+        try {
             const { data, error: dbError } = await supabase
                 .schema('cw')
                 .from('conversations_current')
@@ -252,9 +291,40 @@ export const DashboardDataProvider = ({ children }: { children: ReactNode }) => 
                 .order('attribute_display_name', { ascending: true });
 
             if (dbError) throw dbError;
-            setContactAttributeDefinitions(dedupeContactAttributeDefinitions((data || []) as unknown[]));
+            const definitions = dedupeContactAttributeDefinitions((data || []) as unknown[]);
+            if (definitions.length > 0) {
+                setContactAttributeDefinitions(definitions);
+                return;
+            }
         } catch (dbError) {
             console.error('Failed to fetch contact attribute definitions from Supabase:', dbError);
+        }
+
+        try {
+            const { data, error: catalogError } = await supabase
+                .schema('cw')
+                .from('attribute_key_catalog')
+                .select('attribute_key, attribute_scope, source_names, raw_payload')
+                .eq('account_id', 0)
+                .in('attribute_scope', ['contact', 'resolved'])
+                .order('attribute_key', { ascending: true });
+
+            if (catalogError) throw catalogError;
+
+            setContactAttributeDefinitions(dedupeContactAttributeDefinitions(
+                ((data || []) as AttributeKeyCatalogRow[]).map((row) => ({
+                    attribute_key: row.attribute_key,
+                    attribute_display_name: row.attribute_key,
+                    attribute_display_type: 'text',
+                    attribute_scope: row.attribute_scope === 'resolved' ? 'contact' : row.attribute_scope,
+                    raw_payload: {
+                        source_names: row.source_names,
+                        ...(typeof row.raw_payload === 'object' && row.raw_payload !== null ? row.raw_payload : {}),
+                    },
+                }))
+            ));
+        } catch (catalogError) {
+            console.error('Failed to fetch contact attribute catalog from Supabase:', catalogError);
             setContactAttributeDefinitions([]);
         }
     }, []);

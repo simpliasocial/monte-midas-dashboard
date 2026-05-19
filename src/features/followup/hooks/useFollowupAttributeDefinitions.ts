@@ -54,9 +54,31 @@ export const useFollowupAttributeDefinitions = ({
                         ? (fallbackResult.value.data || []) as unknown[]
                         : [];
 
+                let catalogDefinitions: unknown[] = [];
+                if (fallbackDefinitions.length === 0) {
+                    const { data: catalogRows, error: catalogError } = await supabase
+                        .schema("cw")
+                        .from("attribute_key_catalog")
+                        .select("attribute_key, attribute_scope, source_names, raw_payload")
+                        .eq("account_id", 0)
+                        .in("attribute_scope", ["contact", "resolved"])
+                        .order("attribute_key", { ascending: true });
+
+                    if (!catalogError) {
+                        catalogDefinitions = (catalogRows || []).map((row: Record<string, unknown>) => ({
+                            attribute_key: row.attribute_key,
+                            attribute_display_name: row.attribute_key,
+                            attribute_display_type: "text",
+                            attribute_scope: row.attribute_scope === "resolved" ? "contact" : row.attribute_scope,
+                            raw_payload: row,
+                        }));
+                    }
+                }
+
                 const mergedDefinitions = mergeAttributeDefinitions(
                     normalizeAttributeDefinitions(liveRawDefinitions || []),
                     normalizeAttributeDefinitions(fallbackDefinitions as Record<string, unknown>[]),
+                    normalizeAttributeDefinitions(catalogDefinitions as Record<string, unknown>[]),
                 );
 
                 if (!cancelled) {

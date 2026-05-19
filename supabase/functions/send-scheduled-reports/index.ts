@@ -371,24 +371,15 @@ const fetchCommercialAuditEvents = async (supabase: any, range: { sinceIso: stri
 };
 
 const fetchDashboardSettings = async (supabase: any) => {
-    try {
-        const { data, error } = await supabase
-            .schema("cw")
-            .from("dashboard_tag_settings")
-            .select("settings")
-            .eq("account_id", 0)
-            .maybeSingle();
+    const { data, error } = await supabase
+        .schema("cw")
+        .from("dashboard_tag_settings")
+        .select("settings")
+        .eq("account_id", 0)
+        .maybeSingle();
 
-        if (error) throw error;
-        return asObject(data?.settings);
-    } catch {
-        const { data } = await supabase
-            .from("dashboard_tag_settings")
-            .select("settings")
-            .eq("account_id", 0)
-            .maybeSingle();
-        return asObject(data?.settings);
-    }
+    if (error) throw error;
+    return asObject(data?.settings);
 };
 
 const resolvedAttrs = (row: any) => ({
@@ -476,13 +467,29 @@ const commercialStatusForRow = (row: any, report: any = {}) => {
 
 const labels = (row: any) => Array.isArray(row.labels) ? row.labels.join(", ") : "";
 
-const stage = (row: any) => {
-    const rowLabels = Array.isArray(row.labels) ? row.labels : [];
-    if (rowLabels.includes("venta_exitosa") || rowLabels.includes("venta")) return "Venta exitosa";
-    if (rowLabels.includes("cita_agendada") || rowLabels.includes("cita_agendada_humano") || rowLabels.includes("cita")) return "Cita agendada";
-    if (rowLabels.includes("seguimiento_humano")) return "Seguimiento humano";
-    if (rowLabels.includes("interesado")) return "SQL";
-    if (rowLabels.some((label: string) => ["desinteresado", "no_calificado", "rechazo", "rechazado"].includes(label))) return "No calificado";
+const reportConfigArray = (report: any, key: string) =>
+    Array.isArray(report?.filters?.[key])
+        ? report.filters[key].map((value: unknown) => cleanText(value)).filter(Boolean)
+        : [];
+
+const reportConfigText = (report: any, key: string) => cleanText(report?.filters?.[key]);
+
+const hasConfiguredStageLabel = (normalizedLabels: string[], report: any, keys: string[], fallback: string[]) => {
+    const candidates = [
+        ...fallback,
+        ...keys.flatMap((key) => reportConfigArray(report, key)),
+        ...keys.map((key) => reportConfigText(report, key)),
+    ].map(normalizeText).filter(Boolean);
+    return normalizedLabels.some((label) => candidates.includes(label));
+};
+
+const stage = (row: any, report: any = {}) => {
+    const normalizedLabels = rowLabelArray(row).map(normalizeText);
+    if (hasConfiguredStageLabel(normalizedLabels, report, ["saleTags", "humanSaleTargetLabel"], ["venta_exitosa", "venta"])) return "Venta exitosa";
+    if (hasConfiguredStageLabel(normalizedLabels, report, ["appointmentTags", "humanSalesQueueTags", "humanAppointmentTargetLabel", "scoreAppointmentLabels"], ["cita_agendada", "cita_agendada_humano", "cita"])) return "Cita agendada";
+    if (hasConfiguredStageLabel(normalizedLabels, report, ["humanFollowupQueueTags"], ["seguimiento_humano"])) return "Seguimiento humano";
+    if (hasConfiguredStageLabel(normalizedLabels, report, ["sqlTags"], ["interesado"])) return "SQL";
+    if (hasConfiguredStageLabel(normalizedLabels, report, ["unqualifiedTags"], ["desinteresado", "no_calificado", "rechazo", "rechazado"])) return "No calificado";
     return "Otro";
 };
 
@@ -494,7 +501,7 @@ const detailRow = (row: any, report: any = {}) => {
         Telefono: row.celular || row.meta?.sender?.phone_number || attrs.celular || "",
         Canal: resolveRowChannel(row, attrs),
         Etiquetas: labels(row),
-        Etapa: stage(row),
+        Etapa: stage(row, report),
         Estado: row.status || row.conversation_status || "",
         Correo: row.correo || row.meta?.sender?.email || attrs.correo || "",
         Monto: parseAmount(row.monto_operacion ?? attrs.monto_operacion),
@@ -676,7 +683,7 @@ const summarizeRows = (rows: any[], report: any) => {
     };
 
     rows.forEach((row) => {
-        const rowStage = stage(row);
+        const rowStage = stage(row, report);
         if (rowStage === "SQL") summary.sqls += 1;
         if (rowStage === "Cita agendada") summary.appointments += 1;
         if (isCurrentSaleRow(row, report)) summary.sales += 1;
@@ -826,7 +833,7 @@ const dimensionRows = (rows: any[], report: any, dimensionLabel: string, resolve
             scored: 0,
             buckets: { hot: 0, warm: 0, cold: 0 },
         };
-        const rowStage = stage(row);
+        const rowStage = stage(row, report);
         const score = scoreValue(row);
         current.leads += 1;
         if (rowStage === "SQL") current.sqls += 1;
@@ -876,7 +883,7 @@ const qualityDistributionRows = (rows: any[], report: any) => {
 
 const stageRows = (rows: any[]) => {
     const grouped = new Map<string, number>();
-    rows.forEach((row) => grouped.set(stage(row), (grouped.get(stage(row)) || 0) + 1));
+    rows.forEach((row) => grouped.set(stage(row, report), (grouped.get(stage(row, report)) || 0) + 1));
     return Array.from(grouped.entries()).map(([Etapa, Leads]) => ({ Etapa, Leads })).sort((a, b) => b.Leads - a.Leads);
 };
 
@@ -1520,6 +1527,7 @@ const finalizeAiScheduledRun = async (
             auditEvents,
             companyContext: cleanText(metadata.company_context),
             filters: asObject(metadata.filters),
+            tagSettings: asObject(metadata.tag_settings),
         });
         attachments.push({ filename: file.filename, content: file.contentBase64 });
     }
@@ -1663,6 +1671,7 @@ const processReport = async (supabase: any, report: any, env: { resendKey: strin
                 rangeLabel: range.label,
                 companyContext: cleanText(dashboardSettings.companyContext),
                 filters: report.filters || {},
+                tagSettings: dashboardSettings,
                 openAiApiKey: Deno.env.get("OPENAI_API_KEY") || "",
                 background: true,
             });
@@ -1680,6 +1689,7 @@ const processReport = async (supabase: any, report: any, env: { resendKey: strin
                 report_name: report.name,
                 filters: report.filters || {},
                 company_context: cleanText(dashboardSettings.companyContext),
+                tag_settings: dashboardSettings,
                 conversations: rows.length,
                 commercial_audit_events: auditEvents.length,
                 ai_jobs: aiJobs,
@@ -1714,7 +1724,14 @@ const processReport = async (supabase: any, report: any, env: { resendKey: strin
             }, env);
         }
 
-        const attachments = buildAttachments(report, rows, range.label, auditEvents);
+        const reportWithDiscoveredSettings = {
+            ...report,
+            filters: {
+                ...dashboardSettings,
+                ...asObject(report.filters),
+            },
+        };
+        const attachments = buildAttachments(reportWithDiscoveredSettings, rows, range.label, auditEvents);
         const subject = `${report.name} - ${range.label}`;
         const response = await sendEmail({
             apiKey: env.resendKey,

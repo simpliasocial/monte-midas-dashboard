@@ -68,6 +68,17 @@ const emptyToNull = (value: unknown) =>
 
 const stableJson = (value: unknown) => JSON.stringify(value ?? null);
 
+const optionalNumber = (value: unknown) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const labelTitle = (labelValue: unknown) => {
+    if (typeof labelValue === 'string') return labelValue.trim();
+    const label = asRecord(labelValue);
+    return String(label.title || label.name || label.label || '').trim();
+};
+
 const buildAttributeHistoryRows = (
     conversationId: number,
     previousAttrs: UnknownRecord,
@@ -179,6 +190,38 @@ export const SupabaseSyncService = {
             .schema('cw')
             .from('teams')
             .upsert(rows, { onConflict: 'chatwoot_team_id' });
+
+        if (error) throw error;
+    },
+
+    async upsertLabels(labels: unknown[], accountId = 0, chatwootAccountId?: unknown) {
+        const rows = labels
+            .map((labelValue) => {
+                const label = typeof labelValue === 'string' ? { title: labelValue } : asRecord(labelValue);
+                const title = labelTitle(labelValue);
+                if (!title) return null;
+
+                return {
+                    account_id: accountId,
+                    chatwoot_account_id: optionalNumber(chatwootAccountId),
+                    chatwoot_label_id: optionalNumber(label.id),
+                    title,
+                    color: emptyToNull(label.color),
+                    description: emptyToNull(label.description),
+                    show_on_sidebar: typeof label.show_on_sidebar === 'boolean' ? label.show_on_sidebar : null,
+                    raw_payload: label,
+                    last_seen_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                };
+            })
+            .filter(Boolean);
+
+        if (rows.length === 0) return;
+
+        const { error } = await supabase
+            .schema('cw')
+            .from('label_catalog')
+            .upsert(rows, { onConflict: 'account_id,normalized_title' });
 
         if (error) throw error;
     },
@@ -542,6 +585,15 @@ export const SupabaseSyncService = {
                 cursor_payload: payload,
                 updated_at: new Date().toISOString()
             });
+    },
+
+    async refreshDashboardDiscovery(accountId = 0) {
+        const { data, error } = await supabase
+            .schema('cw')
+            .rpc('refresh_dashboard_discovery', { target_account_id: accountId });
+
+        if (error) throw error;
+        return data;
     }
 };
 

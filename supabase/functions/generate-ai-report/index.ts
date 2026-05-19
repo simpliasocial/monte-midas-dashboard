@@ -120,23 +120,15 @@ const fetchCommercialAuditEvents = async (
 };
 
 const fetchDashboardSettings = async (supabase: ReturnType<typeof createClient>) => {
-    try {
-        const { data, error } = await supabase
-            .schema("cw")
-            .from("dashboard_tag_settings")
-            .select("settings")
-            .eq("account_id", 0)
-            .maybeSingle();
-        if (error) throw error;
-        return asObject((data as { settings?: unknown } | null)?.settings);
-    } catch {
-        const { data } = await supabase
-            .from("dashboard_tag_settings")
-            .select("settings")
-            .eq("account_id", 0)
-            .maybeSingle();
-        return asObject((data as { settings?: unknown } | null)?.settings);
-    }
+    const { data, error } = await supabase
+        .schema("cw")
+        .from("dashboard_tag_settings")
+        .select("settings")
+        .eq("account_id", 0)
+        .maybeSingle();
+
+    if (error) throw error;
+    return asObject((data as { settings?: unknown } | null)?.settings);
 };
 
 const fetchUserRole = async (
@@ -244,6 +236,7 @@ serve(async (req) => {
                 auditEvents: await fetchCommercialAuditEvents(supabase, range),
                 companyContext: cleanText(payload.companyContext) || cleanText(settings.companyContext),
                 filters: payload.filters,
+                tagSettings: settings,
             });
             return jsonResponse({ ok: true, status: "completed", jobId: responseId, responseId, ...file });
         }
@@ -264,6 +257,7 @@ serve(async (req) => {
             rangeLabel: range.label,
             companyContext: cleanText(payload.companyContext) || cleanText(settings.companyContext),
             filters: payload.filters,
+            tagSettings: settings,
             openAiApiKey,
             background: true,
         });

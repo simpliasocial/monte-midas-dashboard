@@ -202,6 +202,153 @@ const emptyToNull = (value: unknown) =>
 
 const stableJson = (value: unknown) => JSON.stringify(value ?? null);
 
+const parseDashboardAccountId = (body: Record<string, any>) => {
+    const configured = body.dashboard_account_id ?? Deno.env.get("DASHBOARD_ACCOUNT_ID") ?? 0;
+    const parsed = Number(configured);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const labelTitle = (label: unknown) => {
+    if (typeof label === "string") return label.trim();
+    const record = asObject(label);
+    return String(record.title || record.name || record.label || "").trim();
+};
+
+const optionalNumber = (value: unknown) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const upsertLabelCatalog = async (
+    supabase: ReturnType<typeof createClient>,
+    labels: unknown[],
+    dashboardAccountId: number,
+    chatwootAccountId: string,
+) => {
+    const rows = labels
+        .map((label) => {
+            const record = typeof label === "string" ? { title: label } : asObject(label);
+            const title = labelTitle(label);
+            if (!title) return null;
+
+            return {
+                account_id: dashboardAccountId,
+                chatwoot_account_id: optionalNumber(chatwootAccountId),
+                chatwoot_label_id: optionalNumber(record.id),
+                title,
+                color: emptyToNull(record.color),
+                description: emptyToNull(record.description),
+                show_on_sidebar: typeof record.show_on_sidebar === "boolean" ? record.show_on_sidebar : null,
+                raw_payload: record,
+                last_seen_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            };
+        })
+        .filter(Boolean);
+
+    if (rows.length === 0) return 0;
+
+    const { error } = await supabase
+        .schema("cw")
+        .from("label_catalog")
+        .upsert(rows, { onConflict: "account_id,normalized_title" });
+
+    if (error) throw error;
+    return rows.length;
+};
+
+const parseAttributeScope = (definition: Record<string, any>) => {
+    const model = definition.attribute_model ?? definition.attribute_model_type ?? definition.attribute_scope ?? definition.model;
+    const modelText = normalizeText(model);
+
+    if (model === 0 || modelText.includes("conversation")) return "conversation";
+    if (model === 1 || modelText.includes("contact")) return "contact";
+    return "unknown";
+};
+
+const fetchAttributeDefinitions = async (
+    apiGet: (endpoint: string, params?: Record<string, string | number>) => Promise<any>,
+) => {
+    const variants: Array<Record<string, string | number> | undefined> = [
+        undefined,
+        { attribute_model: 0 },
+        { attribute_model: 1 },
+        { attribute_model: "contact" },
+        { attribute_model: "conversation" },
+        { attribute_scope: "contact" },
+        { attribute_scope: "conversation" },
+    ];
+
+    const results = await Promise.allSettled(variants.map((params) => apiGet("/custom_attribute_definitions", params)));
+    const byScopeAndKey = new Map<string, Record<string, any>>();
+
+    results.forEach((result) => {
+        if (result.status !== "fulfilled" || !Array.isArray(result.value)) return;
+
+        result.value.forEach((definition: unknown) => {
+            const record = asObject(definition);
+            const attributeKey = String(record.attribute_key || record.key || "").trim();
+            const attributeId = optionalNumber(record.id ?? record.chatwoot_attribute_id);
+            if (!attributeKey || attributeId === null) return;
+
+            const attributeScope = parseAttributeScope(record);
+            byScopeAndKey.set(`${attributeScope}:${attributeKey}`, {
+                ...record,
+                id: attributeId,
+                attribute_key: attributeKey,
+                attribute_scope: attributeScope,
+            });
+        });
+    });
+
+    return Array.from(byScopeAndKey.values());
+};
+
+const upsertAttributeDefinitions = async (
+    supabase: ReturnType<typeof createClient>,
+    definitions: Record<string, any>[],
+) => {
+    const rows = definitions.map((definition) => ({
+        chatwoot_attribute_id: Number(definition.id),
+        attribute_scope: definition.attribute_scope || parseAttributeScope(definition),
+        attribute_key: String(definition.attribute_key || definition.key || "").trim(),
+        attribute_display_name: emptyToNull(definition.attribute_display_name || definition.name),
+        attribute_display_type: emptyToNull(definition.attribute_display_type || definition.display_type),
+        attribute_description: emptyToNull(definition.attribute_description || definition.description),
+        regex_pattern: emptyToNull(definition.regex_pattern),
+        regex_cue: emptyToNull(definition.regex_cue),
+        attribute_values: definition.attribute_values ?? null,
+        attribute_model: emptyToNull(definition.attribute_model_type ?? definition.attribute_model ?? definition.attribute_scope),
+        default_value: definition.default_value ?? null,
+        created_at_chatwoot: toIso(definition.created_at),
+        updated_at_chatwoot: toIso(definition.updated_at),
+        raw_payload: definition,
+        updated_at: new Date().toISOString(),
+    })).filter((row) => row.chatwoot_attribute_id && row.attribute_key);
+
+    if (rows.length === 0) return 0;
+
+    const { error } = await supabase
+        .schema("cw")
+        .from("attribute_definitions")
+        .upsert(rows, { onConflict: "attribute_scope,attribute_key" });
+
+    if (error) throw error;
+    return rows.length;
+};
+
+const refreshDashboardDiscovery = async (
+    supabase: ReturnType<typeof createClient>,
+    dashboardAccountId: number,
+) => {
+    const { data, error } = await supabase
+        .schema("cw")
+        .rpc("refresh_dashboard_discovery", { target_account_id: dashboardAccountId });
+
+    if (error) throw error;
+    return data;
+};
+
 const buildAttributeHistoryRows = (
     conversationId: number,
     previousAttrs: Record<string, any>,
@@ -252,6 +399,7 @@ serve(async (req) => {
         const supabase = createClient(supabaseUrl, serviceRoleKey);
         const chatwootUrl = `${chatwootBase}/api/v1/accounts/${accountId}`;
         const body = await req.json().catch(() => ({}));
+        const dashboardAccountId = parseDashboardAccountId(body);
         const windowHours = Number(body.window_hours || 48);
         const mode = body.mode === "full" ? "full" : "delta";
         const syncMessages = ["none", "recent", "all"].includes(body.sync_messages)
@@ -298,12 +446,15 @@ serve(async (req) => {
             sync_messages: syncMessages,
             max_pages: maxPages,
             inboxes: 0,
+            labels: 0,
+            attribute_definitions: 0,
             contacts: 0,
             conversations: 0,
             label_events: 0,
             attribute_events: 0,
             messages: 0,
             pages: 0,
+            dashboard_discovery: null as unknown,
         };
 
         try {
@@ -339,6 +490,14 @@ serve(async (req) => {
                 if (error) throw error;
                 stats.inboxes = inboxRows.length;
             }
+
+            const labels = await apiGet("/labels");
+            if (Array.isArray(labels)) {
+                stats.labels = await upsertLabelCatalog(supabase, labels, dashboardAccountId, accountId);
+            }
+
+            const attributeDefinitions = await fetchAttributeDefinitions(apiGet);
+            stats.attribute_definitions = await upsertAttributeDefinitions(supabase, attributeDefinitions);
 
             let page = 1;
             const seenConversationIds = new Set<number>();
@@ -619,6 +778,8 @@ serve(async (req) => {
                     cursor_payload: { mode, window_hours: windowHours, sync_messages: syncMessages, max_pages: maxPages },
                     updated_at: new Date().toISOString(),
                 }, { onConflict: "cursor_name" });
+
+            stats.dashboard_discovery = await refreshDashboardDiscovery(supabase, dashboardAccountId);
 
             await supabase
                 .schema("cw")

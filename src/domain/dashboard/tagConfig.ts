@@ -9,6 +9,17 @@ import {
     type ScoreThresholds,
 } from "@/domain/lead";
 
+export interface AutoDiscoveredTagGroups {
+    sqlTags?: string[];
+    appointmentTags?: string[];
+    saleTags?: string[];
+    unqualifiedTags?: string[];
+    humanFollowupQueueTags?: string[];
+    humanAppointmentFieldKeys?: string[];
+    humanSaleFieldKeys?: string[];
+    scoreAttributeKey?: string;
+}
+
 export interface TagConfig {
     sqlTags: string[];
     appointmentTags: string[];
@@ -30,6 +41,16 @@ export interface TagConfig {
     reportColumnFields?: Record<string, string[]>;
     criticalReportProfiles?: Record<string, CriticalReportProfileConfig>;
     companyContext?: string;
+    autoDiscoveryEnabled?: boolean;
+    lastAutoDiscoveryAt?: string;
+    availableLabels?: string[];
+    discoveredLabels?: string[];
+    availableAttributeKeys?: string[];
+    discoveredAttributeKeys?: string[];
+    contactAttributeKeys?: string[];
+    conversationAttributeKeys?: string[];
+    resolvedAttributeKeys?: string[];
+    autoTagGroups?: AutoDiscoveredTagGroups;
 }
 
 export const DEFAULT_TAG_CONFIG: TagConfig = {
@@ -102,6 +123,17 @@ const normalizeCriticalReportProfiles = (value?: Record<string, Partial<Critical
     return Object.fromEntries(entries);
 };
 
+const normalizeAutoTagGroups = (value?: Partial<AutoDiscoveredTagGroups> | null): AutoDiscoveredTagGroups => ({
+    sqlTags: normalizeTagArray(value?.sqlTags, []),
+    appointmentTags: normalizeTagArray(value?.appointmentTags, []),
+    saleTags: normalizeTagArray(value?.saleTags, []),
+    unqualifiedTags: normalizeTagArray(value?.unqualifiedTags, []),
+    humanFollowupQueueTags: normalizeTagArray(value?.humanFollowupQueueTags, []),
+    humanAppointmentFieldKeys: normalizeTagArray(value?.humanAppointmentFieldKeys, []),
+    humanSaleFieldKeys: normalizeTagArray(value?.humanSaleFieldKeys, []),
+    scoreAttributeKey: String(value?.scoreAttributeKey || "").trim(),
+});
+
 export const normalizeTagConfig = (value?: Partial<TagConfig> | null): TagConfig => ({
     sqlTags: normalizeTagArray(value?.sqlTags, DEFAULT_TAG_CONFIG.sqlTags),
     appointmentTags: normalizeTagArray(value?.appointmentTags, DEFAULT_TAG_CONFIG.appointmentTags),
@@ -123,4 +155,14 @@ export const normalizeTagConfig = (value?: Partial<TagConfig> | null): TagConfig
     reportColumnFields: normalizeReportColumnFields(value?.reportColumnFields),
     criticalReportProfiles: normalizeCriticalReportProfiles(value?.criticalReportProfiles),
     companyContext: String(value?.companyContext || DEFAULT_TAG_CONFIG.companyContext || "").trim(),
+    autoDiscoveryEnabled: typeof value?.autoDiscoveryEnabled === "boolean" ? value.autoDiscoveryEnabled : false,
+    lastAutoDiscoveryAt: String(value?.lastAutoDiscoveryAt || "").trim(),
+    availableLabels: normalizeTagArray(value?.availableLabels, []),
+    discoveredLabels: normalizeTagArray(value?.discoveredLabels, []),
+    availableAttributeKeys: normalizeTagArray(value?.availableAttributeKeys, []),
+    discoveredAttributeKeys: normalizeTagArray(value?.discoveredAttributeKeys, []),
+    contactAttributeKeys: normalizeTagArray(value?.contactAttributeKeys, []),
+    conversationAttributeKeys: normalizeTagArray(value?.conversationAttributeKeys, []),
+    resolvedAttributeKeys: normalizeTagArray(value?.resolvedAttributeKeys, []),
+    autoTagGroups: normalizeAutoTagGroups(value?.autoTagGroups),
 });

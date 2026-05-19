@@ -137,6 +137,55 @@ const emptyToNull = (value: unknown) =>
 
 const stableJson = (value: unknown) => JSON.stringify(value ?? null);
 
+const parseDashboardAccountId = (body: Record<string, any>) => {
+    const configured = body.dashboard_account_id ?? Deno.env.get("DASHBOARD_ACCOUNT_ID") ?? 0;
+    const parsed = Number(configured);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const optionalNumber = (value: unknown) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const upsertLabelTitles = async (
+    supabase: ReturnType<typeof createClient>,
+    labels: string[],
+    dashboardAccountId: number,
+    chatwootAccountId: unknown,
+) => {
+    const rows = normalizeLabels(labels)
+        .map((title) => ({
+            account_id: dashboardAccountId,
+            chatwoot_account_id: optionalNumber(chatwootAccountId),
+            title,
+            raw_payload: { source: "chatwoot-label-webhook", title },
+            last_seen_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        }));
+
+    if (rows.length === 0) return;
+
+    const { error } = await supabase
+        .schema("cw")
+        .from("label_catalog")
+        .upsert(rows, { onConflict: "account_id,normalized_title" });
+
+    if (error) throw error;
+};
+
+const refreshDashboardDiscovery = async (
+    supabase: ReturnType<typeof createClient>,
+    dashboardAccountId: number,
+) => {
+    const { data, error } = await supabase
+        .schema("cw")
+        .rpc("refresh_dashboard_discovery", { target_account_id: dashboardAccountId });
+
+    if (error) throw error;
+    return data;
+};
+
 const buildAttributeHistoryRows = (
     conversationId: number,
     previousAttrs: Record<string, any>,
@@ -297,6 +346,7 @@ serve(async (req) => {
 
         const supabase = createClient(supabaseUrl, serviceRoleKey);
         const body = await req.json();
+        const dashboardAccountId = parseDashboardAccountId(body);
         const eventName = body.event || body.name || body.event_name || "conversation_label_change";
 
         let conversation =
@@ -467,12 +517,32 @@ serve(async (req) => {
             if (conversationError) throw conversationError;
         }
 
+        let dashboardDiscovery: unknown = null;
+        try {
+            await upsertLabelTitles(
+                supabase,
+                [
+                    ...delta.previous,
+                    ...delta.next,
+                    ...delta.added,
+                    ...delta.removed,
+                    ...normalizeLabels(conversation?.labels || body.labels || []),
+                ],
+                dashboardAccountId,
+                conversation?.account_id || body.account_id,
+            );
+            dashboardDiscovery = await refreshDashboardDiscovery(supabase, dashboardAccountId);
+        } catch (discoveryError) {
+            console.warn("Dashboard discovery refresh failed after webhook:", discoveryError);
+        }
+
         return new Response(JSON.stringify({
             success: true,
             conversation_id: conversationId,
             event: eventName,
             added_labels: delta.added,
             removed_labels: delta.removed,
+            dashboard_discovery: dashboardDiscovery,
         }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 200,

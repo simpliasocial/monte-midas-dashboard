@@ -31,6 +31,7 @@ import {
 import { buildCommercialAuditRows } from "@/lib/commercialFacts";
 import { formatReportDateTime, REPORT_TIME_ZONE } from "@/shared/report/reportFormatting";
 import { asRecord, asRecordArray } from "@/domain/common/types";
+import { buildMetaCampaignInsightsExportRows, type MetaCampaignInsightRow } from "@/features/meta-ads/model/metaAdsInsightsModel";
 import type { InboxMap, DashboardReportInput, DashboardReportData } from "../domain/reportTypes";
 import {
     getScoreNumber,
@@ -380,9 +381,11 @@ export const buildAnalysisRows = (
     }
 
     if (tabId === "trends") {
+        const metaRows = asRecordArray(asRecord(dashboardData?.metaCampaignInsights).rows) as unknown as MetaCampaignInsightRow[];
         add("Leads por canal", buildNamedValueRows(asRecordArray(trends.channelLeads || dashboardData?.channelData), "Canal", "Leads"));
         add("Campañas", buildNamedValueRows(asRecordArray(dashboardData?.campaignData || trends.campaignList), "Campaña", "Leads", "name", "leads"));
         add("Ingresos por periodo", buildNamedValueRows(asRecordArray(trends.revenuePeaks || trends.revenuePeakDays), "Periodo", "Monto", "date", "value"));
+        add("Meta Ads Insights", buildMetaCampaignInsightsExportRows(metaRows));
         add("Calidad por canal", buildDimensionRows(conversations, inboxMap, tagSettings, "Canal", (conversation, map) => {
             const inbox = conversation.inbox_id ? map.get(Number(conversation.inbox_id)) : undefined;
             return getLeadChannelName(conversation, inbox);

@@ -41,6 +41,7 @@ import { isAdmin } from "@/domain/auth/permissions";
 import { DEFAULT_TAG_CONFIG } from "@/domain/dashboard";
 import { useDashboardContext } from "@/context/useDashboardContext";
 import { useDashboardData } from "@/features/dashboard/hooks/useDashboardData";
+import { useMetaCampaignInsights } from "@/features/meta-ads/hooks/useMetaCampaignInsights";
 import { useAiReportActions, type AiReportDownloadResponse } from "@/application/report/useAiReportActions";
 import { useDashboardReportActions } from "@/application/report/useDashboardReportActions";
 import { useScheduledReportActions, type ScheduledReportFrequency } from "@/application/report/useScheduledReportActions";
@@ -150,6 +151,11 @@ export function TabExportMenu({
 
     const reportTitle = title || profile?.label || (tabId ? REPORT_TAB_LABELS[tabId] : "Reporte");
     const initialFormats = defaultFormats?.length ? defaultFormats : profile?.fileFormats?.length ? profile.fileFormats : DEFAULT_FORMATS;
+    const shouldIncludeMetaInsights = !profileKey && resolvedTabIds.includes("trends");
+    const {
+        data: metaCampaignInsights,
+        refetch: refetchMetaCampaignInsights,
+    } = useMetaCampaignInsights(globalFilters, { enabled: shouldIncludeMetaInsights });
 
     const [scheduleOpen, setScheduleOpen] = useState(false);
     const [columnsOpen, setColumnsOpen] = useState(false);
@@ -290,6 +296,10 @@ export function TabExportMenu({
                 return;
             }
 
+            const metaInsightsForExport = shouldIncludeMetaInsights
+                ? metaCampaignInsights || (await refetchMetaCampaignInsights()).data
+                : undefined;
+
             await downloadDashboardReport(formatId, {
                 title: reportTitle,
                 tabIds: resolvedTabIds,
@@ -297,7 +307,9 @@ export function TabExportMenu({
                 inboxes,
                 tagSettings,
                 globalFilters,
-                dashboardData,
+                dashboardData: metaInsightsForExport
+                    ? { ...dashboardData, metaCampaignInsights: metaInsightsForExport }
+                    : dashboardData,
                 commercialAuditEvents,
             });
             toast.success("Reporte descargado correctamente");

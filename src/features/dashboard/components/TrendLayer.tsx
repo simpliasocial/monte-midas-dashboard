@@ -28,6 +28,7 @@ import {
 import { useDashboardContext } from "@/context/useDashboardContext";
 import type { DashboardTrendMetrics, DashboardValuePoint } from "@/application/dashboard/viewModel";
 import { formatBusinessLabel, formatBusinessList } from "@/lib/displayCopy";
+import { MetaCampaignInsightsTable } from "@/features/meta-ads/components/MetaCampaignInsightsTable";
 
 const COLORS = ["#243d90", "#059669", "#d97706", "#7c3aed", "#db2777", "#475569", "#0891b2"];
 const WARM_COLORS = ["#ef4444", "#f97316", "#f43f5e", "#f59e0b", "#dc2626", "#ea580c"];
@@ -316,6 +317,8 @@ const TrendLayer = () => {
                     </CardContent>
                 </Card>
             </div>
+
+            <MetaCampaignInsightsTable filters={globalFilters} />
         </div>
     );
 };

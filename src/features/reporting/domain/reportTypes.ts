@@ -30,6 +30,7 @@ export interface DashboardReportData {
     historicalFunnelData?: unknown;
     humanMetrics?: unknown;
     kpis?: unknown;
+    metaCampaignInsights?: unknown;
     operationalMetrics?: unknown;
     ownerPerformance?: unknown;
     trendMetrics?: unknown;

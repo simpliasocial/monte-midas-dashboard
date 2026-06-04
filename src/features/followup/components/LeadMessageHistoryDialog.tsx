@@ -36,7 +36,10 @@ export const LeadMessageHistoryDialog = ({
     lead,
     messages,
     loading,
-}: LeadMessageHistoryDialogProps) => (
+}: LeadMessageHistoryDialogProps) => {
+    const chatwootUrl = lead ? getChatwootUrl(lead) : "";
+
+    return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl sm:max-w-3xl">
             <DialogHeader>
@@ -89,17 +92,21 @@ export const LeadMessageHistoryDialog = ({
 
             <DialogFooter className="mt-4 border-t pt-4">
                 <Button variant="outline" onClick={() => onOpenChange(false)}>Cerrar</Button>
-                <a
-                    href={lead ? getChatwootUrl(lead.id) : "#"}
-                    target="_blank"
-                    rel="noreferrer"
-                >
-                    <Button className="gap-2">
+                {chatwootUrl ? (
+                    <a href={chatwootUrl} target="_blank" rel="noreferrer">
+                        <Button className="gap-2">
+                            <ExternalLink className="h-4 w-4" />
+                            Abrir conversación
+                        </Button>
+                    </a>
+                ) : (
+                    <Button className="gap-2" disabled>
                         <ExternalLink className="h-4 w-4" />
-                        Abrir conversación
+                        Sin conversación en Chatwoot
                     </Button>
-                </a>
+                )}
             </DialogFooter>
         </DialogContent>
     </Dialog>
-);
+    );
+};

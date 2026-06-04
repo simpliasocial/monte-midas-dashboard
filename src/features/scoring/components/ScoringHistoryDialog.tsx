@@ -11,10 +11,11 @@ interface ScoringHistoryDialogProps {
     loadingHistory: boolean;
     closeHistory: () => void;
     openInChatwoot: () => void;
+    canOpenInChatwoot?: boolean;
 }
 
 export const ScoringHistoryDialog: React.FC<ScoringHistoryDialogProps> = ({
-    viewingLead, historyMessages, loadingHistory, closeHistory, openInChatwoot
+    viewingLead, historyMessages, loadingHistory, closeHistory, openInChatwoot, canOpenInChatwoot = false
 }) => {
     return (
         <Dialog open={!!viewingLead} onOpenChange={(open) => !open && closeHistory()}>
@@ -69,9 +70,9 @@ export const ScoringHistoryDialog: React.FC<ScoringHistoryDialogProps> = ({
 
                 <DialogFooter className="mt-4 border-t pt-4">
                     <Button variant="outline" onClick={() => closeHistory()}>Cerrar</Button>
-                    <Button className="gap-2" onClick={openInChatwoot}>
+                    <Button className="gap-2" onClick={openInChatwoot} disabled={!canOpenInChatwoot}>
                         <ExternalLink className="h-4 w-4" />
-                        Abrir conversación
+                        {canOpenInChatwoot ? "Abrir conversación" : "Sin conversación en Chatwoot"}
                     </Button>
                 </DialogFooter>
             </DialogContent>

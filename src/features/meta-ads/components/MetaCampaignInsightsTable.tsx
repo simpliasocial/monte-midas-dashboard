@@ -9,7 +9,9 @@ import {
     Megaphone,
     RefreshCw,
     Search,
+    Settings2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,12 +26,17 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import type { DashboardFilters } from "@/domain/dashboard";
+import { canConfigureMetaAds } from "@/domain/auth/permissions";
+import { useAuth } from "@/context/useAuth";
 import { formatBusinessLabel } from "@/lib/displayCopy";
+import { useMetaAdsCampaignConfig } from "../hooks/useMetaAdsCampaignConfig";
 import { useMetaCampaignInsights } from "../hooks/useMetaCampaignInsights";
+import { MetaCampaignConfigDialog } from "./MetaCampaignConfigDialog";
 import {
     metaRowMatchesSearch,
     type MetaActionMetric,
     type MetaCampaignInsightRow,
+    type SaveMetaAdsCampaignConfigParams,
 } from "../model/metaAdsInsightsModel";
 
 const PAGE_SIZE = 10;
@@ -132,10 +139,23 @@ const DetailRow = ({ row }: { row: MetaCampaignInsightRow }) => (
 );
 
 export const MetaCampaignInsightsTable = ({ filters }: { filters: DashboardFilters }) => {
+    const { role } = useAuth();
+    const canConfigureCampaigns = canConfigureMetaAds(role);
     const { data, isLoading, isFetching, error, refetch } = useMetaCampaignInsights(filters);
+    const {
+        config,
+        configLoading,
+        configError,
+        refetchConfig,
+        saveConfig,
+        saveConfigError,
+        resetSaveConfig,
+        savingConfig,
+    } = useMetaAdsCampaignConfig(canConfigureCampaigns);
     const [search, setSearch] = useState("");
     const [page, setPage] = useState(1);
     const [expandedKey, setExpandedKey] = useState<string | null>(null);
+    const [configOpen, setConfigOpen] = useState(false);
 
     const rows = data?.rows || [];
     const filteredRows = useMemo(
@@ -153,6 +173,19 @@ export const MetaCampaignInsightsTable = ({ filters }: { filters: DashboardFilte
     const summary = data?.summary;
     const showEmpty = !isLoading && rows.length === 0 && !error;
 
+    const handleConfigOpenChange = (open: boolean) => {
+        if (open) resetSaveConfig();
+        setConfigOpen(open);
+    };
+
+    const handleSaveConfig = async (params: SaveMetaAdsCampaignConfigParams) => {
+        await saveConfig(params);
+        toast.success("Configuración de Meta Ads actualizada");
+        setConfigOpen(false);
+        await refetchConfig();
+        refetch();
+    };
+
     return (
         <Card>
             <CardHeader className="space-y-4">
@@ -168,7 +201,22 @@ export const MetaCampaignInsightsTable = ({ filters }: { filters: DashboardFilte
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline">{sourceLabel(data?.source)}</Badge>
+                        {canConfigureCampaigns && config?.configured && (
+                            <Badge variant="secondary">Cuenta {config.adAccountId}</Badge>
+                        )}
                         {data?.fetchedAt && <Badge variant="secondary">Actualizado {formatLocalDateTime(data.fetchedAt)}</Badge>}
+                        {canConfigureCampaigns && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleConfigOpenChange(true)}
+                                disabled={configLoading}
+                                className="gap-2"
+                            >
+                                {configLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Settings2 className="h-4 w-4" />}
+                                Configurar campañas
+                            </Button>
+                        )}
                         <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-2">
                             {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                             Actualizar
@@ -343,6 +391,18 @@ export const MetaCampaignInsightsTable = ({ filters }: { filters: DashboardFilte
                     </>
                 )}
             </CardContent>
+
+            {canConfigureCampaigns && (
+                <MetaCampaignConfigDialog
+                    open={configOpen}
+                    onOpenChange={handleConfigOpenChange}
+                    config={config}
+                    loading={configLoading}
+                    saving={savingConfig}
+                    error={saveConfigError || configError}
+                    onSave={handleSaveConfig}
+                />
+            )}
         </Card>
     );
 };

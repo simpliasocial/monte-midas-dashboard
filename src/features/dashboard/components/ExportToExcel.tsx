@@ -3,9 +3,8 @@ import { Download } from "lucide-react";
 import * as xlsx from "xlsx";
 import { format } from "date-fns";
 import { useDashboardContext } from "@/context/useDashboardContext";
-import { config } from "@/config";
 import { toast } from "sonner";
-import { getAttrs, getLeadChannelName, getLeadExternalUrl } from "@/lib/leadDisplay";
+import { getAttrs, getChatwootUrl, getLeadChannelName, getLeadExternalUrl } from "@/lib/leadDisplay";
 import { formatBusinessList, formatFieldLabel } from "@/lib/displayCopy";
 import { applyPlainHeaderStyle } from "@/infrastructure/report/excelSheetStyles";
 
@@ -13,6 +12,7 @@ type ExportCell = string | number | boolean;
 type ExportRow = Record<string, ExportCell>;
 type ExportConversationExtras = {
     account_id?: unknown;
+    chatwoot_account_id?: unknown;
     source?: unknown;
 };
 
@@ -53,7 +53,7 @@ export function ExportToExcel() {
                 activeFields.forEach(field => {
                     const displayField = formatFieldLabel(field);
                     if (displayField === "Enlace de conversación") {
-                        row[displayField] = `${config.chatwoot.publicUrl}/app/accounts/${config.chatwoot.accountId}/conversations/${conv.id}`;
+                        row[displayField] = getChatwootUrl(conv) || "Importado";
                         return;
                     }
                     switch (field) {

@@ -15,6 +15,7 @@ export type SalesReportLead = {
     created_at?: number;
     timestamp?: number;
     inbox_id?: number;
+    chatwoot_account_id?: unknown;
     source?: unknown;
     account_id?: unknown;
     meta?: {
@@ -45,7 +46,7 @@ export type BuildSalesReportDataParams<TLead extends SalesReportLead> = {
     salesTotal: number;
     getAttrs: (lead: TLead) => Record<string, unknown>;
     getChannelName: (lead: TLead) => string;
-    getChatwootUrl: (conversationId: number) => string;
+    getChatwootUrl: (lead: TLead) => string;
     getLeadName: (lead: TLead) => string;
     getLeadPhone: (lead: TLead, channel: string) => string;
     getLeadEmail: (lead: TLead) => string;
@@ -112,7 +113,7 @@ export const buildSalesReportData = <TLead extends SalesReportLead>({
             const displayField = formatFieldLabel(field);
 
             if (displayField === "Enlace de conversación") {
-                row[displayField] = getChatwootUrl(lead.id);
+                row[displayField] = getChatwootUrl(lead);
                 return;
             }
 

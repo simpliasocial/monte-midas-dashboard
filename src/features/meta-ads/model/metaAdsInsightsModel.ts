@@ -108,6 +108,28 @@ export interface MetaCampaignInsightsResponse {
     rows: MetaCampaignInsightRow[];
 }
 
+export interface MetaAdsCampaignConfig {
+    configured: boolean;
+    source?: "database" | "secrets";
+    accountId: number;
+    adAccountId: string;
+    tokenLast4: string;
+    graphApiVersion: string;
+    configuredAt?: string;
+    updatedAt?: string;
+}
+
+export interface MetaAdsCampaignConfigResponse {
+    ok: boolean;
+    config: MetaAdsCampaignConfig;
+}
+
+export interface SaveMetaAdsCampaignConfigParams {
+    adAccountId: string;
+    accessToken?: string;
+    graphApiVersion?: string;
+}
+
 const cleanText = (value: unknown) => String(value ?? "").trim();
 
 export const parseMetaNumber = (value: unknown): number => {

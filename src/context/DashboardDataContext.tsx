@@ -10,7 +10,8 @@ import { indexedConversationRepository } from '@/infrastructure/storage/IndexedC
 import { supabase } from '../lib/supabase';
 import { applyLatestLabelState, collectKnownLabels, getLeadAttrs, resolveLeadStage } from '../lib/conversationState';
 import type { CommercialAuditEvent } from '../lib/commercialFacts';
-import { DEFAULT_TAG_CONFIG, normalizeTagConfig, type ContactAttributeDefinition, type DashboardFilters, type TagConfig } from '@/domain/dashboard';
+import { DEFAULT_TAG_CONFIG, normalizeTagConfig, pruneTagConfigToAvailableLabels, type ContactAttributeDefinition, type DashboardFilters, type TagConfig } from '@/domain/dashboard';
+import { asRecord } from '@/domain/common/types';
 import type { ConversationLabelEvent } from '@/domain/conversation';
 import type { Inbox } from '@/domain/lead';
 import { DashboardDataContext } from './dashboardDataContextValue';
@@ -36,6 +37,7 @@ type SupabaseInboxRow = {
     website_token?: string;
     provider?: string;
     slug?: string;
+    raw_payload?: unknown;
 };
 
 type ConversationLabelsRow = {
@@ -63,18 +65,40 @@ const isAbortError = (error: unknown) =>
         error.message === 'canceled'
     );
 
+const filterConversationLabels = (
+    conversation: MinifiedConversation,
+    activeLabelSet: Set<string>,
+): MinifiedConversation => {
+    const currentLabels = Array.isArray(conversation.labels)
+        ? conversation.labels.filter((label) => activeLabelSet.has(String(label || '').trim()))
+        : [];
+    const historicalLabels = Array.isArray(conversation.historical_labels)
+        ? conversation.historical_labels.filter((label) => activeLabelSet.has(String(label || '').trim()))
+        : [];
+
+    return {
+        ...conversation,
+        labels: currentLabels,
+        historical_labels: historicalLabels,
+    };
+};
+
 const normalizeSupabaseInbox = (inbox: SupabaseInboxRow): Inbox | null => {
     const id = Number(inbox.chatwoot_inbox_id ?? inbox.id);
     if (!Number.isFinite(id)) return null;
+    const rawPayload = asRecord(inbox.raw_payload);
+    const rawChannel = asRecord(rawPayload.channel);
 
     return {
         id,
         name: inbox.name,
-        channel_type: inbox.channel_type,
+        channel_type: inbox.channel_type || String(rawPayload.channel_type || rawChannel.channel_type || rawChannel.type || '') || undefined,
         website_url: inbox.website_url,
         website_token: inbox.website_token,
-        provider: inbox.provider,
-        slug: inbox.slug
+        provider: inbox.provider || String(rawPayload.provider || rawChannel.provider || '') || undefined,
+        slug: inbox.slug || String(rawPayload.slug || rawChannel.slug || '') || undefined,
+        channel: rawChannel,
+        raw_payload: rawPayload
     };
 };
 
@@ -84,6 +108,7 @@ export const DashboardDataProvider = ({ children }: { children: ReactNode }) => 
     const [commercialAuditEvents, setCommercialAuditEvents] = useState<CommercialAuditEvent[]>([]);
     const [inboxes, setInboxes] = useState<Inbox[]>([]);
     const [labels, setLabels] = useState<string[]>([]);
+    const [activeLabelsReady, setActiveLabelsReady] = useState(false);
     const [contactAttributeDefinitions, setContactAttributeDefinitions] = useState<ContactAttributeDefinition[]>([]);
     const [tagSettings, setTagSettings] = useState<TagConfig>(DEFAULT_TAG_CONFIG);
     const [loading, setLoading] = useState(true);
@@ -138,21 +163,32 @@ export const DashboardDataProvider = ({ children }: { children: ReactNode }) => 
         }
     }, []);
 
+    const effectiveTagSettings = useMemo(
+        () => activeLabelsReady ? pruneTagConfigToAvailableLabels(tagSettings, labels) : tagSettings,
+        [activeLabelsReady, labels, tagSettings]
+    );
+
     const resolvedConversations = useMemo<ResolvedConversation[]>(() => {
-        const patched = applyLatestLabelState(conversations, labelEvents);
+        const activeLabelSet = new Set(labels);
+        const patched = applyLatestLabelState(conversations, labelEvents)
+            .map((conversation) => activeLabelsReady
+                ? filterConversationLabels(conversation, activeLabelSet)
+                : conversation);
         return patched.map(conv => {
             const resolvedAttrs = getLeadAttrs(conv);
             return {
                 ...conv,
                 resolvedLabels: conv.labels || [],
                 resolvedAttrs,
-                resolvedStage: resolveLeadStage(conv, tagSettings)
+                resolvedStage: resolveLeadStage(conv, effectiveTagSettings)
             };
         });
-    }, [conversations, labelEvents, tagSettings]);
+    }, [activeLabelsReady, conversations, labelEvents, effectiveTagSettings, labels]);
 
-    const effectiveLabels = useMemo(
-        () => collectKnownLabels({
+    const effectiveLabels = useMemo(() => {
+        if (activeLabelsReady) return [...labels];
+
+        return collectKnownLabels({
             catalogLabels: [
                 ...labels,
                 ...(tagSettings.availableLabels || []),
@@ -160,15 +196,16 @@ export const DashboardDataProvider = ({ children }: { children: ReactNode }) => 
             ],
             conversations: resolvedConversations,
             labelEvents
-        }),
-        [labels, tagSettings.availableLabels, tagSettings.discoveredLabels, resolvedConversations, labelEvents]
-    );
+        });
+    }, [activeLabelsReady, labels, tagSettings.availableLabels, tagSettings.discoveredLabels, resolvedConversations, labelEvents]);
 
     const updateTagSettings = useCallback(async (newConfig: TagConfig) => {
-        const normalizedConfig = normalizeTagConfig(newConfig);
+        const normalizedConfig = activeLabelsReady
+            ? pruneTagConfigToAvailableLabels(newConfig, labels)
+            : normalizeTagConfig(newConfig);
         setTagSettings(normalizedConfig);
         await dashboardSettingsRepository.saveTagSettings(normalizedConfig);
-    }, []);
+    }, [activeLabelsReady, labels]);
 
     const loadTagSettings = useCallback(async () => {
         const saved = await dashboardSettingsRepository.loadTagSettings();
@@ -178,10 +215,16 @@ export const DashboardDataProvider = ({ children }: { children: ReactNode }) => 
     const fetchInboxes = useCallback(async (signal: AbortSignal) => {
         try {
             const inboxesData = await chatwootRepository.fetchInboxes(signal);
-            setInboxes(Array.isArray(inboxesData)
+            const normalizedApiInboxes = Array.isArray(inboxesData)
                 ? inboxesData.filter((inbox): inbox is Inbox => Boolean(inbox && inbox.id && inbox.channel_type))
-                : []);
-            return;
+                : [];
+
+            if (normalizedApiInboxes.length > 0) {
+                setInboxes(normalizedApiInboxes);
+                return;
+            }
+
+            console.warn('[Dashboard] Chatwoot inboxes returned empty, trying Supabase fallback');
         } catch (apiError: unknown) {
             if (!isAbortError(apiError)) {
                 console.warn('[Dashboard] Chatwoot inboxes failed, trying Supabase:', apiError);
@@ -210,10 +253,9 @@ export const DashboardDataProvider = ({ children }: { children: ReactNode }) => 
             const normalizedApiLabels = Array.isArray(labelsData)
                 ? Array.from(new Set(labelsData.filter(l => typeof l === 'string').map(l => l.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b))
                 : [];
-            if (normalizedApiLabels.length > 0) {
-                setLabels(normalizedApiLabels);
-                return;
-            }
+            setLabels(normalizedApiLabels);
+            setActiveLabelsReady(true);
+            return;
         } catch (labelsError: unknown) {
             if (!isAbortError(labelsError)) {
                 console.warn('[Dashboard] Chatwoot labels failed, trying fallback:', labelsError);
@@ -238,6 +280,7 @@ export const DashboardDataProvider = ({ children }: { children: ReactNode }) => 
 
             if (catalogLabels.length > 0) {
                 setLabels(catalogLabels);
+                setActiveLabelsReady(true);
                 return;
             }
         } catch (catalogError) {
@@ -258,6 +301,7 @@ export const DashboardDataProvider = ({ children }: { children: ReactNode }) => 
             ].map(label => String(label || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
             setLabels(fallbackLabels);
+            setActiveLabelsReady(false);
         } catch (dbError) {
             console.error('Failed to fetch fallback labels:', dbError);
             setLabels(Array.from(new Set(
@@ -266,6 +310,7 @@ export const DashboardDataProvider = ({ children }: { children: ReactNode }) => 
                     .map(label => String(label || '').trim())
                     .filter(Boolean)
             )).sort((a, b) => a.localeCompare(b)));
+            setActiveLabelsReady(false);
         }
     }, []);
 
@@ -524,7 +569,7 @@ export const DashboardDataProvider = ({ children }: { children: ReactNode }) => 
             inboxes,
             labels: effectiveLabels,
             contactAttributeDefinitions,
-            tagSettings,
+            tagSettings: effectiveTagSettings,
             loading,
             error,
             dataSource,

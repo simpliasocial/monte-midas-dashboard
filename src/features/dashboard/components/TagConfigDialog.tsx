@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { TagConfig } from "@/domain/dashboard";
+import { pruneTagConfigToAvailableLabels, type TagConfig } from "@/domain/dashboard";
 import { formatBusinessLabel } from "@/lib/displayCopy";
 
 interface TagConfigDialogProps {
@@ -37,9 +37,9 @@ export function TagConfigDialog({
     // Keep the editable copy aligned when the dialog opens.
     React.useEffect(() => {
         if (open) {
-            setTempConfig(config);
+            setTempConfig(pruneTagConfigToAvailableLabels(config, availableLabels));
         }
-    }, [open, config]);
+    }, [open, config, availableLabels]);
 
     const toggleTag = (category: TagArrayCategory, tag: string) => {
         setTempConfig((prev) => ({
@@ -53,7 +53,7 @@ export function TagConfigDialog({
     const handleSave = async () => {
         try {
             setSaving(true);
-            await onSave(tempConfig);
+            await onSave(pruneTagConfigToAvailableLabels(tempConfig, availableLabels));
             setOpen(false);
         } finally {
             setSaving(false);

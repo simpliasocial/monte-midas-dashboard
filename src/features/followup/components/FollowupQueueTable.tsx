@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
     CheckCircle2,
@@ -26,9 +27,9 @@ import {
 } from "@/lib/leadDisplay";
 import {
     buildWindowedListState,
-    WINDOWED_LIST_MAX_RENDERED_ROWS,
     WINDOWED_TABLE_MAX_HEIGHT_PX,
 } from "@/lib/windowedList";
+import { TablePaginationControls } from "@/shared/ui/dashboard/TablePaginationControls";
 import { formatBusinessLabel } from "@/lib/displayCopy";
 import { getEmptyQueueMessage } from "../model/leadActionQueueModel";
 
@@ -70,11 +71,25 @@ export const FollowupQueueTable = <TLead extends FollowupQueueTableLead>({
     searchValue,
     onSearchChange,
 }: FollowupQueueTableProps<TLead>) => {
-    const windowedLeads = buildWindowedListState(leads);
+    const [page, setPage] = useState(1);
+    const configuredTagsKey = configuredTags.join("|");
+    const orderedLeads = useMemo(
+        () => [...leads].sort((a, b) => Number(b.timestamp || b.created_at || 0) - Number(a.timestamp || a.created_at || 0)),
+        [leads]
+    );
+    const windowedLeads = buildWindowedListState(orderedLeads, page);
     const filteredLabel = `${windowedLeads.total} lead${windowedLeads.total === 1 ? "" : "s"} filtrado${windowedLeads.total === 1 ? "" : "s"}`;
-    const summaryLabel = windowedLeads.isTrimmed
-        ? `${filteredLabel} \u00b7 viendo los ${WINDOWED_LIST_MAX_RENDERED_ROWS} m\u00e1s recientes`
+    const summaryLabel = windowedLeads.total > 0
+        ? `${filteredLabel} · página ${windowedLeads.page} de ${windowedLeads.pageCount}`
         : filteredLabel;
+
+    useEffect(() => {
+        setPage(1);
+    }, [searchValue, configuredTagsKey]);
+
+    useEffect(() => {
+        if (page !== windowedLeads.page) setPage(windowedLeads.page);
+    }, [page, windowedLeads.page]);
 
     return (
         <Card className="border-primary/20 shadow-sm">
@@ -110,7 +125,10 @@ export const FollowupQueueTable = <TLead extends FollowupQueueTableLead>({
                                 className="h-9 pl-9 text-sm"
                                 placeholder={`Buscar en ${title.toLowerCase()}...`}
                                 value={searchValue}
-                                onChange={(event) => onSearchChange(event.target.value)}
+                                onChange={(event) => {
+                                    setPage(1);
+                                    onSearchChange(event.target.value);
+                                }}
                             />
                         </div>
                     </div>
@@ -145,6 +163,7 @@ export const FollowupQueueTable = <TLead extends FollowupQueueTableLead>({
                                     const lastMessage = getMessagePreview(lead);
                                     const lastMessageDate = formatDateTime(getMessageTimestamp(lead));
                                     const externalUrl = getLeadExternalUrl(lead, channelDisplay);
+                                    const chatwootUrl = getChatwootUrl(lead);
                                     const createdDate = formatDateTime(lead.created_at || lead.timestamp);
                                     const lastInteractionDate = formatDateTime(lead.timestamp || lead.created_at);
 
@@ -231,12 +250,19 @@ export const FollowupQueueTable = <TLead extends FollowupQueueTableLead>({
                                                         <PrimaryActionIcon className="h-3.5 w-3.5" />
                                                         {primaryActionLabel}
                                                     </Button>
-                                                    <a href={getChatwootUrl(lead.id)} target="_blank" rel="noreferrer">
-                                                        <Button size="sm" variant="ghost" className="h-8 gap-2 px-2 text-xs text-muted-foreground hover:text-primary">
+                                                    {chatwootUrl ? (
+                                                        <a href={chatwootUrl} target="_blank" rel="noreferrer">
+                                                            <Button size="sm" variant="ghost" className="h-8 gap-2 px-2 text-xs text-muted-foreground hover:text-primary">
+                                                                <ExternalLink className="h-4 w-4" />
+                                                                {"Abrir conversaci\u00f3n"}
+                                                            </Button>
+                                                        </a>
+                                                    ) : (
+                                                        <Button size="sm" variant="ghost" className="h-8 gap-2 px-2 text-xs text-muted-foreground" disabled>
                                                             <ExternalLink className="h-4 w-4" />
-                                                            {"Abrir conversaci\u00f3n"}
+                                                            Sin Chatwoot
                                                         </Button>
-                                                    </a>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 text-xs text-muted-foreground">{createdDate}</td>
@@ -246,7 +272,7 @@ export const FollowupQueueTable = <TLead extends FollowupQueueTableLead>({
                                 })}
                                 {windowedLeads.visibleItems.length === 0 && (
                                     <tr>
-                                        <td colSpan={9} className="px-6 py-20 text-center">
+                                        <td colSpan={10} className="px-6 py-20 text-center">
                                             <div className="flex flex-col items-center gap-2 opacity-40">
                                                 <CheckCircle2 className="h-12 w-12 text-muted-foreground" />
                                                 <span className="text-sm font-medium italic">{getEmptyQueueMessage(title, configuredTags)}</span>
@@ -257,6 +283,7 @@ export const FollowupQueueTable = <TLead extends FollowupQueueTableLead>({
                             </tbody>
                         </table>
                     </div>
+                    <TablePaginationControls pageState={windowedLeads} onPageChange={setPage} />
                 </div>
             </CardContent>
         </Card>

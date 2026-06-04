@@ -13,7 +13,7 @@ import {
     uniqueConversationsById as uniqueById,
 } from '@/domain/conversation';
 import type { UnknownRecord } from '@/domain/common/types';
-import type { ConversationMessage } from '@/domain/lead';
+import type { ConversationMessage, Inbox } from '@/domain/lead';
 import { supabaseDashboardReadClient } from '@/infrastructure/supabase/SupabaseDashboardReadClient';
 import {
     isIncomingCustomerMessage,
@@ -25,6 +25,12 @@ import {
 
 const MAX_CHATWOOT_PAGES = 200;
 const DETAIL_REFRESH_BATCH_SIZE = 5;
+const INBOX_LOOKUP_TTL_MS = 2 * 60 * 1000;
+
+let inboxLookupCache: { expiresAt: number; map: Map<number, Inbox> } = {
+    expiresAt: 0,
+    map: new Map(),
+};
 
 const dateToGuayaquilDay = (date?: Date) => getGuayaquilDateString(date || new Date());
 
@@ -39,6 +45,38 @@ const runInBatches = async <T, R>(items: T[], batchSize: number, worker: (item: 
 
 const uniqueIds = (values: number[]) =>
     Array.from(new Set(values.filter((value) => Number.isFinite(value) && value > 0)));
+
+const readConversationInboxId = (conversation: unknown) => {
+    if (!conversation || typeof conversation !== 'object' || Array.isArray(conversation)) return undefined;
+    const parsed = Number((conversation as { inbox_id?: unknown }).inbox_id);
+    return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const getChatwootInboxLookup = async (signal?: AbortSignal) => {
+    if (Date.now() < inboxLookupCache.expiresAt && inboxLookupCache.map.size > 0) {
+        return inboxLookupCache.map;
+    }
+
+    try {
+        const inboxes = await chatwootService.getInboxes({ signal });
+        const nextMap = new Map<number, Inbox>(
+            (inboxes || [])
+                .filter((inbox) => inbox && Number.isFinite(Number(inbox.id)))
+                .map((inbox) => [Number(inbox.id), inbox])
+        );
+
+        if (nextMap.size > 0) {
+            inboxLookupCache = {
+                expiresAt: Date.now() + INBOX_LOOKUP_TTL_MS,
+                map: nextMap,
+            };
+        }
+    } catch (error) {
+        console.warn('[HybridDashboardService] Chatwoot inbox lookup failed:', error);
+    }
+
+    return inboxLookupCache.map;
+};
 
 type MessageWithConversationContext = {
     message: ConversationMessage;
@@ -74,6 +112,9 @@ export const HybridDashboardService = {
         const maxPages = params.paginated ? page : MAX_CHATWOOT_PAGES;
         let apiMeta: UnknownRecord = {};
         const seenConversationIds = new Set<number>();
+        const inboxById = await getChatwootInboxLookup(params.signal);
+        const mapConversation = (conversation: unknown) =>
+            mapChatwootConversationToMinified(conversation, inboxById.get(readConversationInboxId(conversation) || 0));
 
         while (page <= maxPages && !params.signal?.aborted) {
             const response = await chatwootService.getConversations({
@@ -98,7 +139,7 @@ export const HybridDashboardService = {
             batchIds.forEach((id) => seenConversationIds.add(id));
 
             const mapped = batch
-                .map(mapChatwootConversationToMinified)
+                .map(mapConversation)
                 .filter((conv) => {
                     const ts = activityTimestamp(conv);
                     return ts >= params.sinceUnix && ts <= params.untilUnix;
@@ -109,7 +150,7 @@ export const HybridDashboardService = {
             if (params.paginated) break;
 
             const oldestTimestamp = Math.min(
-                ...batch.map((conv) => activityTimestamp(mapChatwootConversationToMinified(conv))).filter(Boolean)
+                ...batch.map((conv) => activityTimestamp(mapConversation(conv))).filter(Boolean)
             );
 
             if (oldestTimestamp && oldestTimestamp < params.sinceUnix) break;
@@ -152,7 +193,8 @@ export const HybridDashboardService = {
         const refreshed = await runInBatches(limitedIds, DETAIL_REFRESH_BATCH_SIZE, async (conversationId) => {
             const detail = await chatwootService.getConversationDetails(conversationId, { signal: params.signal });
             if (!detail) return null;
-            return mapChatwootConversationToMinified(detail);
+            const inboxById = await getChatwootInboxLookup(params.signal);
+            return mapChatwootConversationToMinified(detail, inboxById.get(readConversationInboxId(detail) || 0));
         });
 
         return uniqueById(refreshed.filter((conversation): conversation is MinifiedConversation => Boolean(conversation)));

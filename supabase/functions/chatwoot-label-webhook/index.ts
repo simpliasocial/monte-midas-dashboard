@@ -4,7 +4,38 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-chatwoot-webhook-signature, x-webhook-secret",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-chatwoot-signature, x-chatwoot-timestamp, x-chatwoot-delivery, x-chatwoot-webhook-signature, x-webhook-secret",
+};
+
+const bytesToHex = (buffer: ArrayBuffer) =>
+    Array.from(new Uint8Array(buffer))
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+
+const constantTimeEqual = (left: string, right: string) => {
+    if (left.length !== right.length) return false;
+    let mismatch = 0;
+    for (let index = 0; index < left.length; index += 1) {
+        mismatch |= left.charCodeAt(index) ^ right.charCodeAt(index);
+    }
+    return mismatch === 0;
+};
+
+const verifyChatwootSignature = async (req: Request, rawBody: string, secret: string) => {
+    const signature = req.headers.get("x-chatwoot-signature");
+    const timestamp = req.headers.get("x-chatwoot-timestamp");
+    if (!signature || !timestamp) return false;
+
+    const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(secret),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"],
+    );
+    const payload = `${timestamp}.${rawBody}`;
+    const digest = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+    return constantTimeEqual(`sha256=${bytesToHex(digest)}`, signature);
 };
 
 const parseNumber = (value: unknown) => {
@@ -186,6 +217,18 @@ const refreshDashboardDiscovery = async (
     return data;
 };
 
+const pruneDashboardLabelSettings = async (
+    supabase: ReturnType<typeof createClient>,
+    dashboardAccountId: number,
+) => {
+    const { data, error } = await supabase
+        .schema("cw")
+        .rpc("prune_dashboard_settings_labels", { target_account_id: dashboardAccountId });
+
+    if (error) throw error;
+    return data;
+};
+
 const buildAttributeHistoryRows = (
     conversationId: number,
     previousAttrs: Record<string, any>,
@@ -323,14 +366,20 @@ serve(async (req) => {
     }
 
     try {
+        const rawBody = await req.text();
         const configuredSecret = Deno.env.get("CHATWOOT_WEBHOOK_SECRET");
         if (configuredSecret) {
-            const receivedSecret =
-                req.headers.get("x-webhook-secret") ||
-                req.headers.get("x-chatwoot-webhook-signature") ||
-                new URL(req.url).searchParams.get("secret");
+            const explicitSecret =
+                new URL(req.url).searchParams.get("secret") ||
+                req.headers.get("x-webhook-secret");
+            const legacySignatureSecret = req.headers.get("x-chatwoot-webhook-signature");
+            const signatureIsValid = await verifyChatwootSignature(req, rawBody, configuredSecret);
 
-            if (receivedSecret !== configuredSecret) {
+            if (
+                explicitSecret !== configuredSecret &&
+                legacySignatureSecret !== configuredSecret &&
+                !signatureIsValid
+            ) {
                 return new Response(JSON.stringify({ success: false, error: "Unauthorized webhook" }), {
                     headers: { ...corsHeaders, "Content-Type": "application/json" },
                     status: 401,
@@ -345,7 +394,7 @@ serve(async (req) => {
         }
 
         const supabase = createClient(supabaseUrl, serviceRoleKey);
-        const body = await req.json();
+        const body = JSON.parse(rawBody || "{}");
         const dashboardAccountId = parseDashboardAccountId(body);
         const eventName = body.event || body.name || body.event_name || "conversation_label_change";
 
@@ -522,16 +571,14 @@ serve(async (req) => {
             await upsertLabelTitles(
                 supabase,
                 [
-                    ...delta.previous,
                     ...delta.next,
-                    ...delta.added,
-                    ...delta.removed,
                     ...normalizeLabels(conversation?.labels || body.labels || []),
                 ],
                 dashboardAccountId,
                 conversation?.account_id || body.account_id,
             );
             dashboardDiscovery = await refreshDashboardDiscovery(supabase, dashboardAccountId);
+            await pruneDashboardLabelSettings(supabase, dashboardAccountId);
         } catch (discoveryError) {
             console.warn("Dashboard discovery refresh failed after webhook:", discoveryError);
         }

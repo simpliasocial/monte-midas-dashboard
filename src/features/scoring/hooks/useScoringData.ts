@@ -5,7 +5,7 @@ import { getLeadChannelName, normalize, getLeadPhone, getRawLeadPhone, getLeadNa
 import { bucketFromScore, parseNumericScore, formatScoreValue, SCORE_BUCKET_COPY, SCORE_BUCKET_ORDER, type ScoreBucket } from "@/lib/leadScoreClassification";
 import { formatBusinessLabel, formatFieldLabel } from "@/lib/displayCopy";
 import { extractLeadLabels, parseDate, percent, resolveLeadCampaign, scoreAverage, unique, type ScoreDimension } from "@/features/scoring/model/leadScoringModel";
-import { buildWindowedListState, WINDOWED_LIST_VISIBLE_ROWS } from "@/lib/windowedList";
+import { buildWindowedListState } from "@/lib/windowedList";
 import type { Inbox } from "@/domain/lead";
 
 export interface PreparedLead {
@@ -37,6 +37,7 @@ export const useScoringData = (config: {
     const [ownerFilter, setOwnerFilter] = useState("all");
     const [bucketFilter, setBucketFilter] = useState("all");
     const [detailSearch, setDetailSearch] = useState("");
+    const [detailPage, setDetailPage] = useState(1);
     const [scoreDimension, setScoreDimension] = useState<ScoreDimension>("label");
 
     const inboxMap = useMemo(() => new Map<number, Inbox>(inboxes.map(inbox => [Number(inbox.id), inbox])), [inboxes]);
@@ -160,7 +161,10 @@ export const useScoringData = (config: {
         coldPercentage: percent(coldLeads.length, filteredLeads.length),
     };
 
-    const detailRows = [...filteredLeads].sort((a, b) => (b.score ?? Number.NEGATIVE_INFINITY) - (a.score ?? Number.NEGATIVE_INFINITY) || (b.lead.timestamp || 0) - (a.lead.timestamp || 0));
+    const detailRows = useMemo(
+        () => [...filteredLeads].sort((a, b) => (b.score ?? Number.NEGATIVE_INFINITY) - (a.score ?? Number.NEGATIVE_INFINITY) || (b.lead.timestamp || 0) - (a.lead.timestamp || 0)),
+        [filteredLeads]
+    );
 
     const searchedDetailRows = useMemo(() => {
         const query = normalize(detailSearch);
@@ -173,7 +177,24 @@ export const useScoringData = (config: {
         });
     }, [detailRows, detailSearch]);
 
-    const windowedDetailRows = useMemo(() => buildWindowedListState(searchedDetailRows), [searchedDetailRows]);
+    const windowedDetailRows = useMemo(() => buildWindowedListState(searchedDetailRows, detailPage), [searchedDetailRows, detailPage]);
+
+    useEffect(() => {
+        setDetailPage(1);
+    }, [
+        detailSearch,
+        campaignFilter,
+        labelFilters.join("|"),
+        ownerFilter,
+        bucketFilter,
+        globalFilters.startDate,
+        globalFilters.endDate,
+        (globalFilters.selectedInboxes || []).join("|"),
+    ]);
+
+    useEffect(() => {
+        if (detailPage !== windowedDetailRows.page) setDetailPage(windowedDetailRows.page);
+    }, [detailPage, windowedDetailRows.page]);
 
     const scoreFieldLabel = config.selectedScoreAttribute?.label || formatFieldLabel(config.activeScoreAttributeKey) || "ningún campo";
 
@@ -192,15 +213,15 @@ export const useScoringData = (config: {
         return filters.length > 0 ? filters.join(" | ") : "Sin filtros internos; usando fecha y canal global si están seleccionados.";
     }, [globalFilters.startDate, globalFilters.endDate, globalFilters.selectedInboxes, inboxMap, campaignFilter, labelFilters, ownerFilter, bucketFilter, detailSearch]);
 
-    const detailShowingLabel = windowedDetailRows.total > WINDOWED_LIST_VISIBLE_ROWS
-        ? `Mostrando hasta ${windowedDetailRows.visibleItems.length} de ${windowedDetailRows.total}`
-        : `Mostrando ${windowedDetailRows.visibleItems.length} de ${windowedDetailRows.total}`;
+    const detailShowingLabel = windowedDetailRows.total > 0
+        ? `Mostrando ${windowedDetailRows.startIndex + 1}-${windowedDetailRows.endIndex} de ${windowedDetailRows.total}`
+        : `Mostrando 0 de 0`;
 
     return {
         // Filter state
         campaignFilter, setCampaignFilter, labelFilters, setLabelFilters,
         ownerFilter, setOwnerFilter, bucketFilter, setBucketFilter,
-        detailSearch, setDetailSearch, scoreDimension, setScoreDimension,
+        detailSearch, setDetailSearch, detailPage, setDetailPage, scoreDimension, setScoreDimension,
         // Data
         filterOptions, filteredLeads, scoredLeadCount: scoredFilteredLeads.length, filteredMissingScoreCount,
         kpis, bucketDistribution, averageByChannel, averageByDimension, scoreDomain, conversionByBucket,

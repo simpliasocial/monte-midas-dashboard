@@ -95,6 +95,7 @@ const LeadScoringLayer: React.FC = () => {
                 detailShowingLabel={scoringData.detailShowingLabel}
                 detailSearch={scoringData.detailSearch}
                 setDetailSearch={scoringData.setDetailSearch}
+                setDetailPage={scoringData.setDetailPage}
                 openHistory={scoringHistory.openHistory}
             />
 
@@ -104,6 +105,7 @@ const LeadScoringLayer: React.FC = () => {
                 loadingHistory={scoringHistory.loadingHistory}
                 closeHistory={scoringHistory.closeHistory}
                 openInChatwoot={scoringHistory.openInChatwoot}
+                canOpenInChatwoot={scoringHistory.canOpenInChatwoot}
             />
         </div>
     );

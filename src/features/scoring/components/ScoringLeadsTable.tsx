@@ -8,6 +8,7 @@ import { formatDateTime, getLeadExternalUrl, getLeadName, getLeadPhone, getMessa
 import { formatBusinessLabel } from "@/lib/displayCopy";
 import { formatScoreValue, SCORE_BUCKET_COPY } from "@/lib/leadScoreClassification";
 import { WINDOWED_TABLE_MAX_HEIGHT_PX } from "@/lib/windowedList";
+import { TablePaginationControls } from "@/shared/ui/dashboard/TablePaginationControls";
 import { extractLeadLabels } from "../model/leadScoringModel";
 
 interface ScoringLeadsTableProps {
@@ -17,6 +18,7 @@ interface ScoringLeadsTableProps {
     detailShowingLabel: string;
     detailSearch: string;
     setDetailSearch: (value: string) => void;
+    setDetailPage: (page: number) => void;
     openHistory: (lead: any) => void;
 }
 
@@ -24,7 +26,7 @@ const BUCKET_COPY = SCORE_BUCKET_COPY;
 
 export const ScoringLeadsTable: React.FC<ScoringLeadsTableProps> = ({
     scoreFieldLabel, activeFilterSummary, windowedDetailRows,
-    detailShowingLabel, detailSearch, setDetailSearch, openHistory
+    detailShowingLabel, detailSearch, setDetailSearch, setDetailPage, openHistory
 }) => {
     return (
         <Card>
@@ -48,7 +50,10 @@ export const ScoringLeadsTable: React.FC<ScoringLeadsTableProps> = ({
                         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                         <Input
                             value={detailSearch}
-                            onChange={(event) => setDetailSearch(event.target.value)}
+                            onChange={(event) => {
+                                setDetailPage(1);
+                                setDetailSearch(event.target.value);
+                            }}
                             placeholder="Buscar lead, canal, estado, campaña o nivel..."
                             className="h-9 pl-9 text-sm"
                         />
@@ -168,6 +173,7 @@ export const ScoringLeadsTable: React.FC<ScoringLeadsTableProps> = ({
                             </tbody>
                         </table>
                     </div>
+                    <TablePaginationControls pageState={windowedDetailRows} onPageChange={setDetailPage} />
                 </div>
             </CardContent>
         </Card>

@@ -4,7 +4,7 @@ export type { MinifiedConversation } from "@/domain/conversation";
 
 const DB_NAME = 'MonteMidasDB';
 const STORE_NAME = 'conversations';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 export const StorageService = {
     initDB(): Promise<IDBDatabase> {

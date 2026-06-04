@@ -90,7 +90,7 @@ export const buildScoringRows = (
             Estados: formatBusinessList(getReportConversationLabels(conversation), " | "),
             "Historial de mensajes": getMessagePreview(conversation),
             "URL comercial": getLeadExternalUrl(conversation, canal),
-            "Enlace de conversación": getChatwootUrl(conversation.id),
+            "Enlace de conversación": getChatwootUrl(conversation),
             Nivel: SCORE_BUCKET_COPY[bucket].label,
             Puntaje: formatScoreValue(score),
             Campaña: getCampaignValue(conversation),

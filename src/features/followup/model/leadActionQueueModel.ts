@@ -153,19 +153,19 @@ export const getHumanFlowConfig = (
     defaults: HumanFlowConfigInput,
 ): HumanFlowConfigState => ({
     humanFollowupQueueTags: normalizeList(
-        config.humanFollowupQueueTags || defaults.humanFollowupQueueTags || [],
+        config.humanFollowupQueueTags ?? defaults.humanFollowupQueueTags ?? [],
     ),
     humanAppointmentTargetLabel: String(
-        config.humanAppointmentTargetLabel || defaults.humanAppointmentTargetLabel || "",
+        config.humanAppointmentTargetLabel ?? defaults.humanAppointmentTargetLabel ?? "",
     ).trim(),
-    humanSalesQueueTags: normalizeList(config.humanSalesQueueTags || defaults.humanSalesQueueTags || []),
+    humanSalesQueueTags: normalizeList(config.humanSalesQueueTags ?? defaults.humanSalesQueueTags ?? []),
     humanSaleTargetLabel: String(
-        config.humanSaleTargetLabel || defaults.humanSaleTargetLabel || "",
+        config.humanSaleTargetLabel ?? defaults.humanSaleTargetLabel ?? "",
     ).trim(),
     humanAppointmentFieldKeys: normalizeList(
-        config.humanAppointmentFieldKeys || defaults.humanAppointmentFieldKeys || [],
+        config.humanAppointmentFieldKeys ?? defaults.humanAppointmentFieldKeys ?? [],
     ),
-    humanSaleFieldKeys: normalizeList(config.humanSaleFieldKeys || defaults.humanSaleFieldKeys || []),
+    humanSaleFieldKeys: normalizeList(config.humanSaleFieldKeys ?? defaults.humanSaleFieldKeys ?? []),
 });
 
 const arraysEqual = (left: string[], right: string[]) =>

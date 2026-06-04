@@ -18,9 +18,11 @@ export const useScoringHistory = () => {
 
         try {
             let history: ConversationMessage[] = [];
-            const isLivePreferred = lead.source !== "supabase";
+            const chatwootUrl = getChatwootUrl(lead);
+            const isLivePreferred = Boolean(chatwootUrl) && lead.source !== "supabase";
 
             const fetchApiMessages = async (): Promise<ConversationMessage[]> => {
+                if (!chatwootUrl) return [];
                 try {
                     return await chatwootService.getMessages(lead.id);
                 } catch (apiError) {
@@ -68,7 +70,12 @@ export const useScoringHistory = () => {
 
     const openInChatwoot = () => {
         if (!viewingLead) return;
-        window.open(getChatwootUrl(viewingLead.id), "_blank");
+        const chatwootUrl = getChatwootUrl(viewingLead);
+        if (!chatwootUrl) {
+            toast.info("Este lead no tiene una conversación válida en el Chatwoot actual");
+            return;
+        }
+        window.open(chatwootUrl, "_blank");
     };
 
     return {
@@ -78,5 +85,6 @@ export const useScoringHistory = () => {
         openHistory,
         closeHistory,
         openInChatwoot,
+        canOpenInChatwoot: Boolean(viewingLead && getChatwootUrl(viewingLead)),
     };
 };

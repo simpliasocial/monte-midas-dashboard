@@ -171,7 +171,7 @@ export const chatwootClient = {
                 .filter(Boolean);
         } catch (error) {
             console.error("Error fetching Chatwoot labels:", error);
-            return [];
+            throw error;
         }
     },
 

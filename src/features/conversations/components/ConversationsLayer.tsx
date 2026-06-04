@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { chatwootService } from '@/services/ChatwootService';
 import { supabaseHistoricalClient } from '@/infrastructure/supabase/SupabaseHistoricalClient';
 import { useDashboardContext } from '@/context/useDashboardContext';
@@ -40,9 +40,9 @@ import {
 import { formatBusinessLabel } from '@/lib/displayCopy';
 import {
     buildWindowedListState,
-    WINDOWED_LIST_MAX_RENDERED_ROWS,
     WINDOWED_TABLE_MAX_HEIGHT_PX
 } from '@/lib/windowedList';
+import { TablePaginationControls } from '@/shared/ui/dashboard/TablePaginationControls';
 import { toast } from 'sonner';
 import type { ConversationMessage, Inbox } from '@/domain/lead';
 
@@ -76,6 +76,7 @@ const ConversationsLayer = () => {
     const [viewingConv, setViewingConv] = useState<MinifiedConversation | null>(null);
     const [messages, setMessages] = useState<ConversationMessage[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
+    const [page, setPage] = useState(1);
 
     const selectedInboxKey = (globalFilters.selectedInboxes || []).join(',');
     const selectedInboxes = useMemo(
@@ -138,14 +139,22 @@ const ConversationsLayer = () => {
     }, [conversations, globalFilters.startDate, globalFilters.endDate, selectedInboxes, search, getChannelName, getInbox]);
 
     const windowedConversations = useMemo(
-        () => buildWindowedListState(filteredConversations),
-        [filteredConversations]
+        () => buildWindowedListState(filteredConversations, page),
+        [filteredConversations, page]
     );
 
-    const openInChatwoot = (conversationId: number) => {
-        const url = getChatwootUrl(conversationId);
+    useEffect(() => {
+        setPage(1);
+    }, [search, globalFilters.startDate, globalFilters.endDate, selectedInboxKey]);
+
+    useEffect(() => {
+        if (page !== windowedConversations.page) setPage(windowedConversations.page);
+    }, [page, windowedConversations.page]);
+
+    const openInChatwoot = (lead: MinifiedConversation) => {
+        const url = getChatwootUrl(lead);
         if (!url) {
-            toast.info('Lead importado: no tiene conversación original en Chatwoot');
+            toast.info('Este lead no tiene una conversación válida en el Chatwoot actual');
             return;
         }
         window.open(url, '_blank');
@@ -158,9 +167,10 @@ const ConversationsLayer = () => {
 
         try {
             let history: ConversationMessage[] = [];
-            const isLivePreferred = lead.source !== 'supabase';
+            const chatwootUrl = getChatwootUrl(lead);
+            const isLivePreferred = Boolean(chatwootUrl) && lead.source !== 'supabase';
             const fetchApiMessages = async (): Promise<ConversationMessage[]> => {
-                if (!getChatwootUrl(lead.id)) return [];
+                if (!chatwootUrl) return [];
                 try {
                     return await chatwootService.getMessages(lead.id);
                 } catch (apiError) {
@@ -214,8 +224,8 @@ const ConversationsLayer = () => {
                             </CardTitle>
                             <CardDescription>
                                 Total encontrado: <span className="font-bold text-foreground">{windowedConversations.total}</span>
-                                {windowedConversations.isTrimmed && (
-                                    <span> · viendo las {WINDOWED_LIST_MAX_RENDERED_ROWS} más recientes</span>
+                                {windowedConversations.total > 0 && (
+                                    <span> · página {windowedConversations.page} de {windowedConversations.pageCount}</span>
                                 )}
                             </CardDescription>
                             {(liveError || historicalError || error) && (
@@ -236,7 +246,10 @@ const ConversationsLayer = () => {
                                     placeholder="Buscar por ID, nombre, número, estado o canal..."
                                     className="pl-9 h-9 text-sm"
                                     value={search}
-                                    onChange={(event) => setSearch(event.target.value)}
+                                    onChange={(event) => {
+                                        setPage(1);
+                                        setSearch(event.target.value);
+                                    }}
                                 />
                             </div>
                         </div>
@@ -273,7 +286,7 @@ const ConversationsLayer = () => {
                                         <tbody className="divide-y divide-border">
                                             {windowedConversations.visibleItems.length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={8} className="px-6 py-24 text-center">
+                                                    <td colSpan={9} className="px-6 py-24 text-center">
                                                         <div className="flex flex-col items-center gap-2 opacity-40">
                                                             <Search className="h-10 w-10" />
                                                             <p className="text-sm font-medium">No se encontraron resultados</p>
@@ -373,6 +386,7 @@ const ConversationsLayer = () => {
                                         </tbody>
                                     </table>
                                 </div>
+                                <TablePaginationControls pageState={windowedConversations} onPageChange={setPage} />
                             </div>
                         </div>
                     )}
@@ -432,11 +446,11 @@ const ConversationsLayer = () => {
                         <Button variant="outline" onClick={() => setViewingConv(null)}>Cerrar</Button>
                         <Button
                             className="gap-2"
-                            onClick={() => viewingConv && openInChatwoot(viewingConv.id)}
-                            disabled={Boolean(viewingConv) && !getChatwootUrl(viewingConv.id)}
+                            onClick={() => viewingConv && openInChatwoot(viewingConv)}
+                            disabled={Boolean(viewingConv) && !getChatwootUrl(viewingConv)}
                         >
                             <ExternalLink className="h-4 w-4" />
-                            {viewingConv && !getChatwootUrl(viewingConv.id) ? 'Lead importado' : 'Abrir conversación'}
+                            {viewingConv && !getChatwootUrl(viewingConv) ? 'Sin conversación en Chatwoot' : 'Abrir conversación'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -14,8 +14,13 @@ export interface ConversationSender {
 
 export interface ChatwootConversation {
     id: number;
+    account_id?: number;
+    chatwoot_account_id?: number;
     status: string;
     inbox_id: number;
+    channel?: string;
+    channel_name?: string;
+    channel_type?: string;
     messages: ConversationMessage[];
     meta: {
         sender: ConversationSender;
@@ -31,6 +36,7 @@ export interface ChatwootConversation {
     conversation_custom_attributes?: UnknownRecord;
     contact_custom_attributes?: UnknownRecord;
     resolved_custom_attributes?: UnknownRecord;
+    raw_payload?: UnknownRecord;
     source?: DataOrigin;
 }
 
@@ -38,6 +44,7 @@ export interface MinifiedConversation {
     id: number;
     status: string;
     labels: string[];
+    historical_labels?: string[];
     timestamp: number;
     created_at?: number;
     first_reply_created_at?: number;
@@ -52,9 +59,14 @@ export interface MinifiedConversation {
     resolved_custom_attributes?: UnknownRecord;
     messages?: ConversationMessage[];
     inbox_id?: number;
+    chatwoot_account_id?: number;
+    channel?: string;
+    channel_name?: string;
+    channel_type?: string;
     last_non_activity_message?: ConversationMessage;
     source?: DataOrigin;
     perfil_url?: string;
+    raw_payload?: UnknownRecord;
 }
 
 export interface IncomingMessageTrafficEvent {

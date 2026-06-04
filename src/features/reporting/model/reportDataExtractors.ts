@@ -198,7 +198,7 @@ export const getFieldValue = (
     const displayFieldKey = normalizeReportFieldKey(displayField);
 
     if (fieldKey === "enlace_de_conversacion" || displayFieldKey === "enlace_de_conversacion") {
-        return getChatwootUrl(conversation.id) || "Importado";
+        return getChatwootUrl(conversation) || "Importado";
     }
 
     switch (fieldKey) {

@@ -68,7 +68,7 @@ export const useSalesReportExport = <TLead extends SalesReportLead>({
             salesTotal,
             getAttrs: (lead) => getAttrs(toDisplayLead(lead)),
             getChannelName: (lead) => getChannelName(toDisplayLead(lead)),
-            getChatwootUrl,
+            getChatwootUrl: (lead) => getChatwootUrl(toDisplayLead(lead)),
             getLeadName: (lead) => getLeadName(toDisplayLead(lead)),
             getLeadPhone: (lead, channel) => getLeadPhone(toDisplayLead(lead), channel),
             getLeadEmail: (lead) => getLeadEmail(toDisplayLead(lead)),

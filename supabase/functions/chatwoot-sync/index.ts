@@ -47,6 +47,11 @@ const normalizeText = (value: unknown) =>
         .replace(/[\u0300-\u036f]/g, "")
         .trim();
 
+const catalogTextKey = (value: unknown) =>
+    normalizeText(value)
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+
 const CHANNEL_ALIAS_LABELS: Array<{ label: string; tokens: string[] }> = [
     { label: "WhatsApp", tokens: ["whatsapp", "whats app", "wa.me"] },
     { label: "Instagram", tokens: ["instagram"] },
@@ -244,7 +249,31 @@ const upsertLabelCatalog = async (
                 updated_at: new Date().toISOString(),
             };
         })
-        .filter(Boolean);
+        .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+    const activeNormalizedTitles = new Set(rows.map((row) => catalogTextKey(row.title)).filter(Boolean));
+    const { data: existingLabels, error: existingError } = await supabase
+        .schema("cw")
+        .from("label_catalog")
+        .select("normalized_title")
+        .eq("account_id", dashboardAccountId);
+
+    if (existingError) throw existingError;
+
+    const staleNormalizedTitles = (existingLabels || [])
+        .map((row: Record<string, unknown>) => String(row.normalized_title || "").trim())
+        .filter((normalizedTitle: string) => normalizedTitle && !activeNormalizedTitles.has(normalizedTitle));
+
+    if (staleNormalizedTitles.length > 0) {
+        const { error: deleteError } = await supabase
+            .schema("cw")
+            .from("label_catalog")
+            .delete()
+            .eq("account_id", dashboardAccountId)
+            .in("normalized_title", staleNormalizedTitles);
+
+        if (deleteError) throw deleteError;
+    }
 
     if (rows.length === 0) return 0;
 
@@ -344,6 +373,30 @@ const refreshDashboardDiscovery = async (
     const { data, error } = await supabase
         .schema("cw")
         .rpc("refresh_dashboard_discovery", { target_account_id: dashboardAccountId });
+
+    if (error) throw error;
+    return data;
+};
+
+const pruneDashboardLabelSettings = async (
+    supabase: ReturnType<typeof createClient>,
+    dashboardAccountId: number,
+) => {
+    const { data, error } = await supabase
+        .schema("cw")
+        .rpc("prune_dashboard_settings_labels", { target_account_id: dashboardAccountId });
+
+    if (error) throw error;
+    return data;
+};
+
+const pruneDeletedLabelReferences = async (
+    supabase: ReturnType<typeof createClient>,
+    dashboardAccountId: number,
+) => {
+    const { data, error } = await supabase
+        .schema("cw")
+        .rpc("prune_deleted_label_references", { target_account_id: dashboardAccountId });
 
     if (error) throw error;
     return data;
@@ -455,6 +508,8 @@ serve(async (req) => {
             messages: 0,
             pages: 0,
             dashboard_discovery: null as unknown,
+            dashboard_settings_prune: null as unknown,
+            deleted_label_references_prune: null as unknown,
         };
 
         try {
@@ -725,10 +780,10 @@ serve(async (req) => {
 
                         return {
                             chatwoot_message_id: msg.id,
-                            chatwoot_conversation_id: msg.conversation_id,
+                            chatwoot_conversation_id: msg.conversation_id ?? conv.id,
                             chatwoot_contact_id: msg.sender?.id,
-                            chatwoot_account_id: msg.account_id,
-                            chatwoot_inbox_id: msg.inbox_id,
+                            chatwoot_account_id: msg.account_id ?? conv.account_id ?? optionalNumber(accountId),
+                            chatwoot_inbox_id: msg.inbox_id ?? conv.inbox_id,
                             sender_id: msg.sender?.id,
                             sender_type: msg.sender_type,
                             message_type: String(msg.message_type ?? ""),
@@ -780,6 +835,8 @@ serve(async (req) => {
                 }, { onConflict: "cursor_name" });
 
             stats.dashboard_discovery = await refreshDashboardDiscovery(supabase, dashboardAccountId);
+            stats.dashboard_settings_prune = await pruneDashboardLabelSettings(supabase, dashboardAccountId);
+            stats.deleted_label_references_prune = await pruneDeletedLabelReferences(supabase, dashboardAccountId);
 
             await supabase
                 .schema("cw")

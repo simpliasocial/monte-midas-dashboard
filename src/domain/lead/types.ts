@@ -28,10 +28,12 @@ export interface Inbox {
     id: number;
     name?: string;
     channel_type?: string;
+    channel?: unknown;
     provider?: string;
     slug?: string;
     website_url?: string;
     website_token?: string;
+    raw_payload?: UnknownRecord;
 }
 
 export interface ConversationParticipant {
@@ -60,8 +62,13 @@ export interface LeadLike {
     first_reply_created_at?: number;
     waiting_since?: number;
     inbox_id?: number;
+    chatwoot_account_id?: number;
+    channel?: string;
+    channel_name?: string;
+    channel_type?: string;
     source?: DataOrigin;
     perfil_url?: string;
+    raw_payload?: UnknownRecord;
     meta?: {
         sender?: ConversationParticipant;
         assignee?: ConversationAssignee;

@@ -134,6 +134,11 @@ const normalizeAutoTagGroups = (value?: Partial<AutoDiscoveredTagGroups> | null)
     scoreAttributeKey: String(value?.scoreAttributeKey || "").trim(),
 });
 
+const normalizeOptionalLabel = (value: unknown, fallback: string) => {
+    if (value === undefined || value === null) return fallback;
+    return String(value).trim();
+};
+
 export const normalizeTagConfig = (value?: Partial<TagConfig> | null): TagConfig => ({
     sqlTags: normalizeTagArray(value?.sqlTags, DEFAULT_TAG_CONFIG.sqlTags),
     appointmentTags: normalizeTagArray(value?.appointmentTags, DEFAULT_TAG_CONFIG.appointmentTags),
@@ -143,9 +148,9 @@ export const normalizeTagConfig = (value?: Partial<TagConfig> | null): TagConfig
     scoreMediumTags: normalizeTagArray(value?.scoreMediumTags, DEFAULT_TAG_CONFIG.scoreMediumTags || []),
     scoreLowTags: normalizeTagArray(value?.scoreLowTags, DEFAULT_TAG_CONFIG.scoreLowTags || []),
     humanFollowupQueueTags: normalizeTagArray(value?.humanFollowupQueueTags, DEFAULT_TAG_CONFIG.humanFollowupQueueTags || []),
-    humanAppointmentTargetLabel: String(value?.humanAppointmentTargetLabel || DEFAULT_TAG_CONFIG.humanAppointmentTargetLabel || "").trim() || DEFAULT_TAG_CONFIG.humanAppointmentTargetLabel,
+    humanAppointmentTargetLabel: normalizeOptionalLabel(value?.humanAppointmentTargetLabel, DEFAULT_TAG_CONFIG.humanAppointmentTargetLabel || ""),
     humanSalesQueueTags: normalizeTagArray(value?.humanSalesQueueTags, DEFAULT_TAG_CONFIG.humanSalesQueueTags || []),
-    humanSaleTargetLabel: String(value?.humanSaleTargetLabel || DEFAULT_TAG_CONFIG.humanSaleTargetLabel || "").trim() || DEFAULT_TAG_CONFIG.humanSaleTargetLabel,
+    humanSaleTargetLabel: normalizeOptionalLabel(value?.humanSaleTargetLabel, DEFAULT_TAG_CONFIG.humanSaleTargetLabel || ""),
     humanAppointmentFieldKeys: normalizeTagArray(value?.humanAppointmentFieldKeys, DEFAULT_TAG_CONFIG.humanAppointmentFieldKeys || []),
     humanSaleFieldKeys: normalizeTagArray(value?.humanSaleFieldKeys, DEFAULT_TAG_CONFIG.humanSaleFieldKeys || []),
     scoreAttributeKey: String(value?.scoreAttributeKey || DEFAULT_TAG_CONFIG.scoreAttributeKey || "").trim(),
@@ -166,3 +171,46 @@ export const normalizeTagConfig = (value?: Partial<TagConfig> | null): TagConfig
     resolvedAttributeKeys: normalizeTagArray(value?.resolvedAttributeKeys, []),
     autoTagGroups: normalizeAutoTagGroups(value?.autoTagGroups),
 });
+
+const pruneLabels = (values: unknown, availableSet: Set<string>) =>
+    normalizeTagArray(values, []).filter((label) => availableSet.has(label));
+
+const keepLabel = (value: unknown, availableSet: Set<string>) => {
+    const label = String(value || "").trim();
+    return availableSet.has(label) ? label : "";
+};
+
+export const pruneTagConfigToAvailableLabels = (
+    config: Partial<TagConfig> | null | undefined,
+    availableLabels: string[],
+): TagConfig => {
+    const normalized = normalizeTagConfig(config);
+    const activeLabels = normalizeTagArray(availableLabels, []);
+    const availableSet = new Set(activeLabels);
+
+    return {
+        ...normalized,
+        sqlTags: pruneLabels(normalized.sqlTags, availableSet),
+        appointmentTags: pruneLabels(normalized.appointmentTags, availableSet),
+        saleTags: pruneLabels(normalized.saleTags, availableSet),
+        unqualifiedTags: pruneLabels(normalized.unqualifiedTags, availableSet),
+        scoreHighTags: pruneLabels(normalized.scoreHighTags, availableSet),
+        scoreMediumTags: pruneLabels(normalized.scoreMediumTags, availableSet),
+        scoreLowTags: pruneLabels(normalized.scoreLowTags, availableSet),
+        humanFollowupQueueTags: pruneLabels(normalized.humanFollowupQueueTags, availableSet),
+        humanAppointmentTargetLabel: keepLabel(normalized.humanAppointmentTargetLabel, availableSet),
+        humanSalesQueueTags: pruneLabels(normalized.humanSalesQueueTags, availableSet),
+        humanSaleTargetLabel: keepLabel(normalized.humanSaleTargetLabel, availableSet),
+        scoreAppointmentLabels: pruneLabels(normalized.scoreAppointmentLabels, availableSet),
+        availableLabels: activeLabels,
+        discoveredLabels: pruneLabels(normalized.discoveredLabels, availableSet),
+        autoTagGroups: {
+            ...normalized.autoTagGroups,
+            sqlTags: pruneLabels(normalized.autoTagGroups?.sqlTags, availableSet),
+            appointmentTags: pruneLabels(normalized.autoTagGroups?.appointmentTags, availableSet),
+            saleTags: pruneLabels(normalized.autoTagGroups?.saleTags, availableSet),
+            unqualifiedTags: pruneLabels(normalized.autoTagGroups?.unqualifiedTags, availableSet),
+            humanFollowupQueueTags: pruneLabels(normalized.autoTagGroups?.humanFollowupQueueTags, availableSet),
+        },
+    };
+};

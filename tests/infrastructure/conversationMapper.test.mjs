@@ -53,6 +53,32 @@ test("mapChatwootConversationToMinified normalizes live API payloads", () => {
     assert.equal(mapped.timestamp, Math.floor(Date.parse("2026-05-07T15:00:00.000Z") / 1000));
 });
 
+test("mapChatwootConversationToMinified enriches live conversations with inbox channel hints", () => {
+    const mapped = mapChatwootConversationToMinified({
+        id: "7",
+        status: "open",
+        inbox_id: "112948",
+        labels: [],
+        updated_at: "2026-06-04T14:02:00.000Z",
+        meta: {
+            sender: {
+                name: "Mario Jativa",
+            },
+        },
+    }, {
+        id: 112948,
+        name: "Monte Midas",
+        channel_type: "Channel::FacebookPage",
+    });
+
+    assert.equal(mapped.id, 7);
+    assert.equal(mapped.inbox_id, 112948);
+    assert.equal(mapped.channel_type, "Channel::FacebookPage");
+    assert.equal(mapped.channel_name, "Monte Midas");
+    assert.equal(mapped.channel, "Monte Midas");
+    assert.equal(mapped.raw_payload.id, "7");
+});
+
 test("mapSupabaseConversationRowToMinified merges stored attrs and preserves history preview", () => {
     const mapped = mapSupabaseConversationRowToMinified({
         chatwoot_conversation_id: "77",

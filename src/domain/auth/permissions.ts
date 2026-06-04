@@ -33,6 +33,10 @@ export function canConfigureReportContext(role: string | null): boolean {
   return role === 'platform_admin' || role === 'company_admin';
 }
 
+export function canConfigureMetaAds(role: string | null): boolean {
+  return role === 'platform_admin' || role === 'company_admin';
+}
+
 export function canAccessCriticalReportProfile(
   role: string | null,
   profileKey: string,

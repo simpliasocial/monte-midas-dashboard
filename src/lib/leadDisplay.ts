@@ -4,7 +4,9 @@ import { asRecord } from "@/domain/common/types";
 import { resolveLeadAttributes } from "@/domain/lead";
 
 type LeadDisplayInput = Partial<LeadLike> & {
+    account_id?: unknown;
     additional_attributes?: unknown;
+    chatwoot_account_id?: unknown;
     channel?: unknown;
     channel_name?: unknown;
     channel_type?: unknown;
@@ -55,13 +57,19 @@ export const getRawLeadPhone = (lead: LeadDisplayInput) =>
     cleanText(lead?.meta?.sender?.phone_number);
 
 const CHANNEL_ALIAS_LABELS: Array<{ label: string; tokens: string[] }> = [
-    { label: "WhatsApp", tokens: ["whatsapp", "whats app", "wa.me"] },
-    { label: "Instagram", tokens: ["instagram"] },
-    { label: "Facebook", tokens: ["facebook", "messenger"] },
+    { label: "WhatsApp", tokens: ["whatsapp", "whats app", "wa.me", "channel::whatsapp"] },
+    { label: "Instagram", tokens: ["instagram", "channel::instagram", "instagramdirect"] },
+    { label: "Facebook", tokens: ["facebook", "messenger", "facebookpage", "facebook page", "fb page", "channel::facebookpage"] },
     { label: "Telegram", tokens: ["telegram", "t.me", "tg://", "cwcloudbot_bot"] },
     { label: "TikTok", tokens: ["tiktok", "tik tok", "douyin", "simplia.social"] },
     { label: "Sitio web", tokens: ["webwidget", "web_widget", "web widget", "website", "web site", "sitio web", "pagina web", "página web", "livechat", "live chat", "widget"] }
 ];
+
+const hintText = (value: unknown) =>
+    (typeof value === "string" || typeof value === "number") ? cleanText(value) : "";
+
+const joinHints = (values: unknown[]) =>
+    values.map(hintText).filter(Boolean).join(" ");
 
 const resolveSocialChannelLabel = (value: unknown) => {
     const normalizedValue = normalize(value);
@@ -216,9 +224,33 @@ export const getMessagePreview = (lead: LeadDisplayInput) =>
 export const getMessageTimestamp = (lead: LeadDisplayInput) =>
     getLastMessage(lead)?.created_at || lead?.timestamp || lead?.created_at;
 
-export const getChatwootUrl = (conversationId: number | string) => {
+type ChatwootUrlInput = number | string | LeadDisplayInput | null | undefined;
+
+const getChatwootConversationId = (input: ChatwootUrlInput) =>
+    typeof input === "object" && input !== null ? input.id : input;
+
+const getChatwootAccountId = (input: ChatwootUrlInput) => {
+    if (typeof input !== "object" || input === null) return null;
+    const rawPayload = asRecord(input.raw_payload);
+    const parsed = Number(input.chatwoot_account_id ?? input.account_id ?? rawPayload.account_id);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+export const getChatwootUrl = (input: ChatwootUrlInput) => {
+    const conversationId = getChatwootConversationId(input);
     const numericId = Number(conversationId);
     if (!Number.isFinite(numericId) || numericId <= 0) return "";
+
+    if (typeof input === "object" && input !== null) {
+        const configuredAccountId = Number(config.chatwoot.accountId);
+        const rowAccountId = getChatwootAccountId(input);
+        if (rowAccountId !== null) {
+            if (!Number.isFinite(configuredAccountId) || rowAccountId !== configuredAccountId) return "";
+        } else if (input.source !== "api") {
+            return "";
+        }
+    }
+
     return `${config.chatwoot.publicUrl}/app/accounts/${config.chatwoot.accountId}/conversations/${conversationId}`;
 };
 
@@ -249,12 +281,42 @@ export const channelLabelFromType = (type?: string, fallback?: string) => {
 
 export const getLeadChannelName = (lead: LeadDisplayInput, inbox?: InboxDisplayInput | null) => {
     const attrs = getAttrs(lead);
+    const rawPayload = asRecord(lead?.raw_payload);
+    const rawMeta = asRecord(rawPayload.meta);
+    const rawSender = asRecord(rawMeta.sender);
+    const rawAdditionalAttributes = asRecord(rawPayload.additional_attributes);
+    const rawSenderAdditional = asRecord(rawSender.additional_attributes);
+    const rawInbox = asRecord(rawPayload.inbox);
+    const rawChannel = asRecord(rawPayload.channel);
+    const leadChannel = asRecord(lead?.channel);
     const senderAdditional = asRecord(lead?.meta?.sender?.additional_attributes);
-    const fallbackHints = [
+    const inboxChannel = asRecord(inbox?.channel);
+    const channelTypeHints = joinHints([
+        lead?.channel_type,
+        rawPayload.channel_type,
+        rawInbox.channel_type,
+        rawChannel.channel_type,
+        rawChannel.type,
+        inbox?.channel_type,
+        inboxChannel.type
+    ]);
+    const fallbackHints = joinHints([
         attrs.canal,
+        attrs.channel,
+        attrs.origen,
         lead?.channel,
         lead?.channel_name,
         lead?.source,
+        leadChannel.type,
+        leadChannel.name,
+        leadChannel.provider,
+        rawPayload.channel_name,
+        rawPayload.source,
+        rawPayload.provider,
+        rawAdditionalAttributes.channel,
+        rawAdditionalAttributes.social_channel,
+        rawAdditionalAttributes.provider,
+        rawAdditionalAttributes.platform,
         senderAdditional.channel,
         senderAdditional.social_channel,
         senderAdditional.provider,
@@ -262,12 +324,30 @@ export const getLeadChannelName = (lead: LeadDisplayInput, inbox?: InboxDisplayI
         senderAdditional.source,
         senderAdditional.service,
         senderAdditional.channel_type,
+        rawSenderAdditional.channel,
+        rawSenderAdditional.social_channel,
+        rawSenderAdditional.provider,
+        rawSenderAdditional.platform,
+        rawSenderAdditional.source,
+        rawSenderAdditional.service,
+        rawSenderAdditional.channel_type,
         lead?.meta?.sender?.identifier,
+        rawSender.identifier,
+        rawInbox.name,
+        rawInbox.website_url,
+        rawInbox.website_token,
+        rawInbox.provider,
+        rawInbox.slug,
+        rawChannel.name,
+        rawChannel.provider,
         getInboxChannelName(inbox),
-        inbox?.name
-    ].filter(Boolean).join(" ");
+        inbox?.name,
+        inbox?.provider,
+        inbox?.slug,
+        inboxChannel.type
+    ]);
 
-    return channelLabelFromType(cleanText(lead?.channel_type || inbox?.channel_type), fallbackHints);
+    return channelLabelFromType(channelTypeHints, fallbackHints);
 };
 
 export const getLeadInboxName = (lead: LeadDisplayInput, inbox?: InboxDisplayInput | null) =>

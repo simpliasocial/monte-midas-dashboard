@@ -35,17 +35,46 @@ const toOptionalNumber = (value: unknown) => {
 const asText = (value: unknown, fallback = "") =>
     value === undefined || value === null ? fallback : String(value);
 
+const firstText = (...values: unknown[]) => {
+    for (const value of values) {
+        if (typeof value !== "string" && typeof value !== "number") continue;
+        const text = asText(value).trim();
+        if (text) return text;
+    }
+    return "";
+};
+
 const maxDateToUnix = (...values: unknown[]) =>
     Math.max(0, ...values.map(parseDateToUnix).filter((value) => Number.isFinite(value)));
 
-export const mapChatwootConversationToMinified = (conversation: unknown): MinifiedConversation => {
+export const mapChatwootConversationToMinified = (conversation: unknown, inboxHint?: unknown): MinifiedConversation => {
     const conv = asObject(conversation);
     const meta = asObject(conv.meta);
     const sender = asObject(meta.sender);
     const assignee = asObject(meta.assignee);
+    const embeddedInbox = asObject(conv.inbox);
+    const channelRecord = asObject(conv.channel);
+    const inbox = {
+        ...asObject(inboxHint),
+        ...embeddedInbox,
+    };
+    const channelType = firstText(conv.channel_type, inbox.channel_type, channelRecord.channel_type, channelRecord.type);
+    const channelName = firstText(conv.channel_name, inbox.name, channelRecord.name);
+    const channel = firstText(
+        conv.channel,
+        conv.provider,
+        channelRecord.provider,
+        channelRecord.type,
+        channelRecord.name,
+        inbox.provider,
+        inbox.slug,
+        channelName,
+        channelType,
+    );
 
     return {
         id: toNumber(conv.id),
+        chatwoot_account_id: toOptionalNumber(conv.account_id || conv.chatwoot_account_id),
         status: asText(conv.status, "open"),
         labels: asStringArray(conv.labels),
         timestamp: maxDateToUnix(conv.updated_at, conv.last_activity_at, conv.timestamp, conv.created_at),
@@ -72,9 +101,13 @@ export const mapChatwootConversationToMinified = (conversation: unknown): Minifi
         contact_custom_attributes: asObject(sender.custom_attributes),
         messages: asMessages(conv.messages),
         inbox_id: toOptionalNumber(conv.inbox_id),
+        channel_type: channelType || undefined,
+        channel_name: channelName || undefined,
+        channel: channel || undefined,
         last_non_activity_message: asObject(conv.last_non_activity_message) as ConversationMessage,
         source: "api",
         perfil_url: asText(conv.perfil_url) || undefined,
+        raw_payload: conv,
     };
 };
 
@@ -82,6 +115,9 @@ export const mapSupabaseConversationRowToMinified = (rowValue: unknown): Minifie
     const row = asObject(rowValue);
     const rawPayload = asObject(row.raw_payload);
     const rawMeta = asObject(rawPayload.meta);
+    const rawInbox = asObject(rawPayload.inbox);
+    const rawChannel = asObject(rawPayload.channel);
+    const rawAdditionalAttributes = asObject(rawPayload.additional_attributes);
     const meta = {
         ...rawMeta,
         ...asObject(row.meta),
@@ -116,9 +152,32 @@ export const mapSupabaseConversationRowToMinified = (rowValue: unknown): Minifie
         ...conversationCustomAttributes,
     };
     const lastNonActivity = asObject(rawPayload.last_non_activity_message);
+    const channelType = firstText(
+        row.channel_type,
+        rawPayload.channel_type,
+        rawInbox.channel_type,
+        rawChannel.channel_type,
+        rawChannel.type,
+    );
+    const channelName = firstText(row.channel_name, rawPayload.channel_name, rawInbox.name, rawChannel.name);
+    const channel = firstText(
+        row.canal,
+        rawPayload.channel,
+        rawPayload.provider,
+        rawAdditionalAttributes.channel,
+        rawAdditionalAttributes.social_channel,
+        rawChannel.provider,
+        rawChannel.type,
+        rawChannel.name,
+        rawInbox.provider,
+        rawInbox.slug,
+        channelName,
+        channelType,
+    );
 
     return {
         id: toNumber(row.chatwoot_conversation_id),
+        chatwoot_account_id: toOptionalNumber(row.chatwoot_account_id || rawPayload.account_id),
         status: asText(row.status, "open"),
         labels: asStringArray(row.labels),
         timestamp: maxDateToUnix(
@@ -151,6 +210,9 @@ export const mapSupabaseConversationRowToMinified = (rowValue: unknown): Minifie
         resolved_custom_attributes: customAttributes,
         messages: [],
         inbox_id: toOptionalNumber(row.chatwoot_inbox_id),
+        channel_type: channelType || undefined,
+        channel_name: channelName || undefined,
+        channel: channel || undefined,
         last_non_activity_message: {
             ...lastNonActivity,
             content: asText(row.last_non_activity_message_preview || lastNonActivity.content),
@@ -158,13 +220,19 @@ export const mapSupabaseConversationRowToMinified = (rowValue: unknown): Minifie
         },
         source: "supabase",
         perfil_url: asText(row.perfil_url) || undefined,
+        raw_payload: rawPayload,
     };
 };
 
 export const mapMinifiedToChatwootConversation = (conversation: MinifiedConversation): ChatwootConversation => ({
     id: conversation.id,
+    account_id: conversation.chatwoot_account_id,
+    chatwoot_account_id: conversation.chatwoot_account_id,
     status: conversation.status,
     inbox_id: conversation.inbox_id || 0,
+    channel: conversation.channel,
+    channel_name: conversation.channel_name,
+    channel_type: conversation.channel_type,
     messages: conversation.messages || [],
     meta: {
         sender: {
@@ -195,6 +263,7 @@ export const mapMinifiedToChatwootConversation = (conversation: MinifiedConversa
     conversation_custom_attributes: conversation.conversation_custom_attributes || {},
     contact_custom_attributes: conversation.contact_custom_attributes || conversation.meta?.sender?.custom_attributes || {},
     resolved_custom_attributes: conversation.resolved_custom_attributes || conversation.custom_attributes || {},
+    raw_payload: conversation.raw_payload,
     source: conversation.source,
 });
 

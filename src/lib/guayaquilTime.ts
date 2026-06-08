@@ -14,6 +14,14 @@ const hourFormatter = new Intl.DateTimeFormat('en-US', {
     hour12: false
 });
 
+const timeFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: GUAYAQUIL_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+});
+
 export const getGuayaquilDateString = (date = new Date()) => dateFormatter.format(date);
 
 export const getGuayaquilHour = (date = new Date()) => {
@@ -23,6 +31,14 @@ export const getGuayaquilHour = (date = new Date()) => {
 
 export const getGuayaquilHourLabel = (date = new Date()) =>
     `${getGuayaquilHour(date).toString().padStart(2, '0')}:00`;
+
+export const getGuayaquilTimeString = (date = new Date()) => {
+    const parts = timeFormatter.formatToParts(date);
+    const hour = parts.find((part) => part.type === 'hour')?.value || '00';
+    const minute = parts.find((part) => part.type === 'minute')?.value || '00';
+    const second = parts.find((part) => part.type === 'second')?.value || '00';
+    return `${hour === '24' ? '00' : hour}:${minute}:${second}`;
+};
 
 export const addDaysToDateString = (dateString: string, days: number) => {
     const base = new Date(`${dateString}T00:00:00${GUAYAQUIL_UTC_OFFSET}`);

@@ -33,8 +33,10 @@ SQL_PATH = resolve_existing_path(SQL_CANDIDATES, "SQL de replicacion")
 
 DOCX_MARKER = "Actualización v2.2 - Implementacion verificada al 04/06/2026"
 DOCX_META_ADS_MARKER = "Actualización v2.3 - Meta Ads configurable por negocio al 04/06/2026"
+DOCX_META_CAPI_MARKER = "Actualización v2.4 - Meta CAPI para citas y ventas al 06/06/2026"
 SQL_MARKER = "INICIO BLOQUE 12: addendum 2026-06-04 labels vivos, pruning y discovery"
 SQL_META_ADS_MARKER = "INICIO BLOQUE 16: Meta Ads configurable por negocio"
+SQL_META_CAPI_MARKER = "INICIO BLOQUE 17: Meta CAPI para citas y ventas"
 
 
 def backup(path: Path) -> Path:
@@ -247,6 +249,107 @@ def update_docx_meta_ads() -> bool:
         "El SQL de replicacion incluye ahora el Bloque 16: Meta Ads configurable por negocio. Este bloque es idempotente y se puede ejecutar despues del esquema base de cw.",
         "No se deben insertar tokens reales en el SQL. La configuracion se realiza desde el dashboard o, en escenarios automatizados, invocando la Edge Function save_config con un usuario administrador autenticado.",
         "Para replicar en otra empresa, solo cambian credenciales y cuenta Meta. La estructura cw.meta_ads_configs, meta_campaigns_current, meta_adset_insights_cache y meta_ads_sync_runs se mantiene igual.",
+    ])
+
+    document.save(DOCX_PATH)
+    return True
+
+
+def update_docx_meta_capi() -> bool:
+    document = Document(DOCX_PATH)
+    full_text = "\n".join(p.text for p in document.paragraphs)
+    if DOCX_META_CAPI_MARKER in full_text:
+        return False
+
+    document.add_paragraph().add_run().add_break(WD_BREAK.PAGE)
+    document.add_heading(DOCX_META_CAPI_MARKER, level=1)
+
+    document.add_heading("25.1 Objetivo Del Addendum Meta CAPI", level=2)
+    add_paragraphs(document, [
+        "Este addendum documenta la integracion Meta Conversions API implementada para alimentar eventos de cita y venta desde el dashboard de seguimiento. El objetivo es reemplazar el nodo manual de n8n por una pieza replicable y segura dentro de Supabase, manteniendo el mismo payload operativo que ya funcionaba en produccion.",
+        "La configuracion se realiza desde Seguimiento > Configurar flujo humano > Configurar API CAPI y solo aparece para usuarios con rol platform_admin. Company Admin y Operator no pueden ver ni editar esta configuracion.",
+        "El access_token de Meta CAPI queda guardado server-side en Supabase. El frontend nunca recibe el token completo; solo muestra los ultimos caracteres guardados para confirmar que existe o que fue rotado.",
+    ])
+
+    document.add_heading("25.2 Componentes Implementados", level=2)
+    add_table(document, ["Componente", "Archivo u objeto", "Responsabilidad"], [
+        ["Tabla de configuracion", "cw.meta_capi_configs", "Guarda graph_version, dataset_id, access_token, token_last_four, event_source_url, event_name, source, system_name, appointment_status, action_source, default_channel, client_user_agent, test_event_code y enabled."],
+        ["Tabla de auditoria", "cw.meta_capi_events", "Registra cada intento de envio con event_kind, conversation_id, meeting_id, event_id, status, test_mode, request_payload hasheado, response_payload y error_message."],
+        ["Edge Function", "meta-capi", "Valida el JWT, consulta public.user_profiles.role, construye payload CAPI, hashea datos de usuario y envia a Graph API."],
+        ["Cliente frontend", "MetaCapiClient", "Invoca get_config, save_config, send_event y test_event sin exponer token."],
+        ["Hook React", "useMetaCapiConfig", "Carga configuracion, guarda cambios y ejecuta prueba con datos dummy."],
+        ["UI", "MetaCapiConfigSection", "Formulario embebido al final de Configurar flujo humano con campos de configuracion y bloque Probar test."],
+        ["Permiso", "canConfigureMetaCapi", "Solo platform_admin puede configurar o probar CAPI."],
+        ["Disparos operativos", "LeadActionQueue", "Envia eventos despues de guardar Cita agendada o Venta exitosa."],
+    ])
+
+    document.add_heading("25.3 Variables Que Cambian Por Negocio", level=2)
+    add_table(document, ["Variable", "Donde se configura", "Observacion"], [
+        ["graph_version", "Configurar API CAPI", "Version de Graph API, por ejemplo v20.0. Mantener parametrizable por negocio."],
+        ["dataset_id", "Configurar API CAPI", "ID del dataset/pixel al que se enviaran los eventos /events."],
+        ["access_token", "Configurar API CAPI", "Token de Meta con permisos para enviar eventos CAPI. Nunca se coloca en .env frontend."],
+        ["event_source_url", "Configurar API CAPI", "URL del sitio o fuente principal del negocio, por ejemplo https://montemidas.ec/."],
+        ["system_name", "Configurar API CAPI", "Nombre del sistema/proyecto usado dentro de custom_data y event_id, por ejemplo Monte Web."],
+        ["test_event_code", "Configurar API CAPI", "Si tiene valor, los eventos se envian en modo test para Meta Events Manager."],
+        ["event_name", "Configurar API CAPI", "Por defecto Schedule. Se mantiene editable para otros negocios/eventos."],
+        ["source", "Configurar API CAPI", "Por defecto chatwoot."],
+        ["appointment_status", "Configurar API CAPI", "Por defecto scheduled."],
+        ["action_source", "Configurar API CAPI", "Por defecto website."],
+        ["default_channel", "Configurar API CAPI", "Fallback si el lead no trae canal. Por defecto whatsapp."],
+        ["client_user_agent", "Configurar API CAPI", "Por defecto Mozilla/5.0, sin hash."],
+    ])
+
+    document.add_heading("25.4 Payload Y Hashing", level=2)
+    add_paragraphs(document, [
+        "La Edge Function meta-capi reemplaza el codigo SHA-256 manual del nodo n8n usando crypto.subtle.digest en Deno. El resultado conserva el mismo formato esperado por Meta: hashes SHA-256 en hexadecimal de 64 caracteres.",
+        "Datos hasheados cuando existen: email normalizado en user_data.em, telefono normalizado en user_data.ph, primer nombre en user_data.fn, apellido en user_data.ln y conversation_id en user_data.external_id.",
+        "El payload enviado a Meta contiene data[0].event_name, event_time, action_source, event_source_url, event_id, user_data y custom_data. custom_data incluye source, system, appointment_status, channel, appointment_date, appointment_time, conversation_id, meeting_id y event_kind.",
+        "Si test_event_code esta configurado, se agrega payload.test_event_code y la fila de auditoria queda con test_mode = true.",
+        "Si no hay email, telefono ni nombre suficiente, el evento no se envia y queda registrado como skipped. Esto evita mandar payloads incompletos que Meta podria rechazar.",
+    ])
+
+    document.add_heading("25.5 Flujos Que Disparan CAPI", level=2)
+    add_table(document, ["Pantalla", "Accion", "Campos usados", "Resultado"], [
+        ["Seguimiento > Cola de Trabajo Diaria", "Cita agendada", "channel del lead, Fecha de visita como appointment_date, Hora de visita como appointment_time, conversation_id y meeting_id/fallback ID lead.", "Despues de guardar el cambio en Chatwoot/Supabase, se invoca meta-capi con event_kind = appointment."],
+        ["Seguimiento > Citas Agendadas", "Venta exitosa", "channel del lead, Fecha en que se registro el monto como appointment_date, hora actual America/Guayaquil como appointment_time.", "Despues de guardar la venta, se invoca meta-capi con event_kind = sale."],
+        ["Configurar API CAPI", "Probar test", "Datos dummy ingresados en el formulario y test_event_code configurado.", "Se invoca meta-capi con event_kind = test y test_mode = true."],
+    ])
+
+    document.add_heading("25.6 Comportamiento Ante Errores", level=2)
+    add_paragraphs(document, [
+        "CAPI es posterior al guardado del flujo humano. Si Chatwoot/Supabase guarda la cita o venta correctamente pero Meta CAPI falla, el lead no se revierte; el usuario ve un aviso indicando que el cambio quedo guardado pero CAPI no recibio el evento.",
+        "Si Meta CAPI no esta configurado o esta desactivado, el envio queda skipped y no bloquea la operacion comercial.",
+        "Todos los intentos quedan en cw.meta_capi_events para revision: success, error o skipped. El request_payload almacenado contiene el payload ya hasheado, no los datos personales originales ni el access_token.",
+    ])
+
+    document.add_heading("25.7 Flujo Replicable Para Otro Negocio", level=2)
+    add_paragraphs(document, [
+        "1. Ejecutar el Bloque 17 del SQL de replicacion para crear cw.meta_capi_configs y cw.meta_capi_events con RLS y grants seguros.",
+        "2. Desplegar la Edge Function: npx supabase functions deploy meta-capi --project-ref <PROJECT_REF> --use-api.",
+        "3. Confirmar que existe un usuario platform_admin en public.user_profiles.",
+        "4. Iniciar sesion como platform_admin y abrir Seguimiento > Configurar flujo humano > Configurar API CAPI.",
+        "5. Guardar graph_version, dataset_id, access_token, event_source_url, system_name y, si se quiere probar, test_event_code.",
+        "6. Ejecutar Probar test con datos dummy y revisar en Meta Events Manager que el evento aparezca en Test Events.",
+        "7. Quitar test_event_code o dejarlo vacio para produccion. Confirmar que los siguientes eventos reales no salgan en modo test.",
+        "8. Probar una Cita agendada y una Venta exitosa. Revisar cw.meta_capi_events y el panel de Meta.",
+    ])
+
+    document.add_heading("25.8 Validaciones Recomendadas", level=2)
+    add_table(document, ["Validacion", "Resultado esperado"], [
+        ["RLS meta_capi_configs", "relrowsecurity = true y sin grants a anon/authenticated."],
+        ["RLS meta_capi_events", "relrowsecurity = true y sin grants a anon/authenticated."],
+        ["Funcion desplegada", "meta-capi aparece ACTIVE en Supabase Functions."],
+        ["Permisos UI", "solo platform_admin ve Configurar API CAPI."],
+        ["Config publica", "get_config devuelve tokenLast4, nunca access_token completo."],
+        ["Prueba test", "cw.meta_capi_events registra event_kind = test, status success y test_mode true."],
+        ["Cita agendada", "cw.meta_capi_events registra event_kind = appointment."],
+        ["Venta exitosa", "cw.meta_capi_events registra event_kind = sale."],
+        ["Errores", "Si Meta rechaza el evento, status = error y error_message conserva el detalle resumido."],
+    ])
+
+    document.add_heading("25.9 Criterio De Cierre CAPI", level=2)
+    add_paragraphs(document, [
+        "CAPI se considera listo cuando: la migracion esta aplicada, meta-capi esta ACTIVE, el usuario platform_admin puede guardar configuracion, Probar test envia un evento visible en Meta, los botones Cita agendada y Venta exitosa registran eventos en cw.meta_capi_events y npm run check pasa en el frontend.",
     ])
 
     document.save(DOCX_PATH)
@@ -1133,6 +1236,215 @@ limit 10;
 """
 
 
+SQL_META_CAPI_ADDENDUM = r"""
+
+-- ========================================================================
+-- INICIO BLOQUE 17: Meta CAPI para citas y ventas
+-- DONDE SE EJECUTA: Supabase > SQL Editor
+-- INSTRUCCION: ejecutar despues del esquema base de cw y antes de usar
+-- Seguimiento > Configurar flujo humano > Configurar API CAPI.
+-- OBJETIVO: guardar configuracion Meta Conversions API server-side,
+-- enviar eventos de cita/venta desde el dashboard y auditar intentos.
+-- No insertar tokens reales en este SQL.
+-- ========================================================================
+
+create schema if not exists cw;
+create extension if not exists pgcrypto with schema extensions;
+
+create table if not exists cw.meta_capi_configs (
+    id uuid primary key default gen_random_uuid(),
+    account_id bigint not null default 0,
+    graph_version text not null default 'v20.0',
+    dataset_id text not null,
+    access_token text not null,
+    token_last_four text not null default '',
+    event_source_url text not null,
+    event_name text not null default 'Schedule',
+    source text not null default 'chatwoot',
+    system_name text not null default 'Simplia Leads',
+    appointment_status text not null default 'scheduled',
+    action_source text not null default 'website',
+    default_channel text not null default 'whatsapp',
+    client_user_agent text not null default 'Mozilla/5.0',
+    test_event_code text not null default '',
+    enabled boolean not null default true,
+    configured_by uuid,
+    configured_at timestamptz not null default now(),
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    unique (account_id)
+);
+
+create index if not exists meta_capi_configs_account_enabled_idx
+    on cw.meta_capi_configs (account_id, enabled);
+
+create table if not exists cw.meta_capi_events (
+    id uuid primary key default gen_random_uuid(),
+    account_id bigint not null default 0,
+    event_kind text not null default 'appointment'
+        check (event_kind in ('appointment', 'sale', 'test')),
+    conversation_id text,
+    meeting_id text,
+    event_name text,
+    event_id text,
+    status text not null default 'pending'
+        check (status in ('pending', 'success', 'error', 'skipped')),
+    test_mode boolean not null default false,
+    request_payload jsonb not null default '{}'::jsonb,
+    response_payload jsonb not null default '{}'::jsonb,
+    error_message text,
+    sent_at timestamptz,
+    created_at timestamptz not null default now()
+);
+
+create index if not exists meta_capi_events_account_created_idx
+    on cw.meta_capi_events (account_id, created_at desc);
+
+create index if not exists meta_capi_events_conversation_idx
+    on cw.meta_capi_events (conversation_id, created_at desc);
+
+create index if not exists meta_capi_events_status_idx
+    on cw.meta_capi_events (status, created_at desc);
+
+create or replace function cw.touch_meta_capi_configs_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+    new.updated_at = now();
+    return new;
+end;
+$$;
+
+drop trigger if exists trg_meta_capi_configs_updated_at on cw.meta_capi_configs;
+create trigger trg_meta_capi_configs_updated_at
+    before update on cw.meta_capi_configs
+    for each row
+    execute function cw.touch_meta_capi_configs_updated_at();
+
+alter table cw.meta_capi_configs enable row level security;
+alter table cw.meta_capi_events enable row level security;
+
+revoke all on cw.meta_capi_configs from anon, authenticated;
+revoke all on cw.meta_capi_events from anon, authenticated;
+
+grant usage on schema cw to service_role;
+grant select, insert, update, delete on cw.meta_capi_configs to service_role;
+grant select, insert, update, delete on cw.meta_capi_events to service_role;
+
+-- Seguridad esperada:
+--   1) El access_token completo solo vive en cw.meta_capi_configs.
+--   2) El frontend solo recibe token_last_four.
+--   3) request_payload en cw.meta_capi_events contiene user_data hasheado,
+--      no email/telefono/nombre original ni access_token.
+--   4) anon/authenticated no tienen grants directos sobre estas tablas.
+
+-- Runbook de configuracion:
+-- 1. Desplegar Edge Function:
+--    npx supabase functions deploy meta-capi --project-ref <PROJECT_REF> --use-api
+-- 2. Iniciar sesion en el dashboard con rol platform_admin.
+-- 3. Abrir Seguimiento > Configurar flujo humano > Configurar API CAPI.
+-- 4. Guardar:
+--    graph_version      ejemplo: v20.0
+--    dataset_id         ID del dataset/pixel de Meta
+--    access_token       token CAPI; nunca en frontend
+--    event_source_url   URL del negocio
+--    system_name        nombre del sistema, ejemplo Monte Web
+--    test_event_code    opcional; activa modo test si tiene valor
+--    event_name/source/appointment_status/action_source/default_channel/client_user_agent
+-- 5. Pulsar Probar test con datos dummy y revisar Meta Events Manager.
+-- 6. Para produccion, dejar test_event_code vacio si no se quiere modo test.
+
+-- La funcion meta-capi soporta:
+--   action = get_config   -> solo platform_admin; devuelve configuracion publica.
+--   action = save_config  -> solo platform_admin; guarda/rota token server-side.
+--   action = test_event   -> solo platform_admin; envia datos dummy en modo test.
+--   action = send_event   -> platform_admin/company_admin/operator; usado por
+--                            Cita agendada y Venta exitosa.
+--
+-- Disparos desde dashboard:
+--   Seguimiento > Cola de Trabajo Diaria > Cita agendada:
+--     event_kind = appointment
+--     appointment_date = campo Fecha de visita
+--     appointment_time = campo Hora de visita
+--     channel = canal resuelto del lead
+--
+--   Seguimiento > Citas Agendadas > Venta exitosa:
+--     event_kind = sale
+--     appointment_date = campo Fecha en que se registro el monto
+--     appointment_time = hora actual America/Guayaquil al confirmar venta
+--     channel = canal resuelto del lead
+
+-- Validacion de seguridad:
+select c.relname,
+       c.relrowsecurity,
+       coalesce(
+           jsonb_agg(
+               jsonb_build_object('grantee', g.grantee, 'privilege', g.privilege_type)
+               order by g.grantee, g.privilege_type
+           ) filter (where g.grantee is not null),
+           '[]'::jsonb
+       ) as grants
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+left join information_schema.role_table_grants g
+       on g.table_schema = n.nspname
+      and g.table_name = c.relname
+where n.nspname = 'cw'
+  and c.relname in ('meta_capi_configs', 'meta_capi_events')
+group by c.relname, c.relrowsecurity
+order by c.relname;
+
+-- Validacion posterior a configurar desde el dashboard:
+select account_id,
+       graph_version,
+       dataset_id,
+       token_last_four,
+       event_source_url,
+       event_name,
+       source,
+       system_name,
+       appointment_status,
+       action_source,
+       default_channel,
+       client_user_agent,
+       test_event_code <> '' as test_mode_configured,
+       enabled,
+       configured_at,
+       updated_at
+from cw.meta_capi_configs
+order by updated_at desc;
+
+-- Validacion de eventos enviados/omitidos:
+select event_kind,
+       status,
+       test_mode,
+       count(*) as total,
+       max(created_at) as last_event_at
+from cw.meta_capi_events
+group by event_kind, status, test_mode
+order by last_event_at desc nulls last;
+
+select event_kind,
+       conversation_id,
+       meeting_id,
+       event_name,
+       event_id,
+       status,
+       test_mode,
+       left(coalesce(error_message, ''), 240) as error_message,
+       created_at,
+       sent_at
+from cw.meta_capi_events
+order by created_at desc
+limit 20;
+
+-- ========================================================================
+-- FIN BLOQUE 17: Meta CAPI para citas y ventas
+-- ========================================================================
+"""
+
+
 def update_sql() -> bool:
     text = SQL_PATH.read_text(encoding="utf-8")
     changed = False
@@ -1151,6 +1463,10 @@ def update_sql() -> bool:
 
     if SQL_META_ADS_MARKER not in text:
         text = text.rstrip() + SQL_META_ADS_ADDENDUM + "\n"
+        changed = True
+
+    if SQL_META_CAPI_MARKER not in text:
+        text = text.rstrip() + SQL_META_CAPI_ADDENDUM + "\n"
         changed = True
 
     if changed:
@@ -1192,6 +1508,7 @@ def main() -> None:
 
     docx_changed = update_docx()
     docx_meta_ads_changed = update_docx_meta_ads()
+    docx_meta_capi_changed = update_docx_meta_capi()
     sql_changed = update_sql()
     mirrored_paths = mirror_requested_outputs()
 
@@ -1199,9 +1516,10 @@ def main() -> None:
     print(f"SQL source: {SQL_PATH}")
     print(f"DOCX backup: {docx_backup}")
     print(f"SQL backup: {sql_backup}")
-    print(f"DOCX changed: {docx_changed or docx_meta_ads_changed}")
+    print(f"DOCX changed: {docx_changed or docx_meta_ads_changed or docx_meta_capi_changed}")
     print(f"DOCX v2.2 changed: {docx_changed}")
     print(f"DOCX Meta Ads v2.3 changed: {docx_meta_ads_changed}")
+    print(f"DOCX Meta CAPI v2.4 changed: {docx_meta_capi_changed}")
     print(f"SQL changed: {sql_changed}")
     print("Mirrored outputs:")
     for mirrored_path in mirrored_paths:

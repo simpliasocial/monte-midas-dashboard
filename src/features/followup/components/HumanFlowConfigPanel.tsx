@@ -24,6 +24,7 @@ import {
     type AttributeDefinition,
     type HumanFlowConfigState,
 } from "../model/leadActionQueueModel";
+import { MetaCapiConfigSection } from "./MetaCapiConfigSection";
 
 type HumanFlowListKey = keyof Pick<
     HumanFlowConfigState,
@@ -316,6 +317,15 @@ export const HumanFlowConfigPanel = ({
                                         </div>
                                     </ScrollArea>
                                 )}
+                            </AccordionContent>
+                        </AccordionItem>
+
+                        <AccordionItem value="meta-capi">
+                            <AccordionTrigger className="text-sm">
+                                Configurar API CAPI
+                            </AccordionTrigger>
+                            <AccordionContent>
+                                <MetaCapiConfigSection />
                             </AccordionContent>
                         </AccordionItem>
                     </Accordion>

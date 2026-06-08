@@ -4,6 +4,7 @@ import createJiti from "jiti";
 const jiti = createJiti(import.meta.url);
 const {
     canAccessCriticalReportProfile,
+    canConfigureMetaCapi,
     canConfigureMetaAds,
     canConfigureReportContext,
     getVisibleTabs,
@@ -33,6 +34,12 @@ test("company and platform admins can configure Meta Ads", () => {
     assert.equal(canConfigureMetaAds("platform_admin"), true);
     assert.equal(canConfigureMetaAds("company_admin"), true);
     assert.equal(canConfigureMetaAds("operator"), false);
+});
+
+test("only platform admins can configure Meta CAPI", () => {
+    assert.equal(canConfigureMetaCapi("platform_admin"), true);
+    assert.equal(canConfigureMetaCapi("company_admin"), false);
+    assert.equal(canConfigureMetaCapi("operator"), false);
 });
 
 test("operator sees reporting tab but only daily operations profile", () => {

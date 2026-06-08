@@ -18,9 +18,10 @@ import { isAdmin } from "@/domain/auth/permissions";
 import { DateRangePicker } from "@/shared/ui/dashboard/DateRangePicker";
 import { ChannelSelector } from "@/shared/ui/dashboard/ChannelSelector";
 import { TabExportMenu } from "@/features/dashboard/components/TabExportMenu";
-import { getGuayaquilDateString } from "@/lib/guayaquilTime";
+import { getGuayaquilDateString, getGuayaquilTimeString } from "@/lib/guayaquilTime";
 import type { MinifiedConversation } from "@/services/StorageService";
 import type { Inbox } from "@/domain/lead";
+import { metaCapiClient } from "@/infrastructure/supabase/MetaCapiClient";
 import { DateRange } from "react-day-picker";
 import {
     getAttrs,
@@ -83,6 +84,7 @@ import { FollowupQueueTable } from "./FollowupQueueTable";
 import { SalesReportPanel } from "./SalesReportPanel";
 import { HumanFlowConfigPanel } from "./HumanFlowConfigPanel";
 import { LeadMessageHistoryDialog } from "./LeadMessageHistoryDialog";
+import type { MetaCapiEventKind, MetaCapiLeadPayload } from "../model/metaCapiModel";
 
 type QueueLead = Omit<DashboardQueueLead, "id" | "labels" | "meta" | "source"> &
     Partial<ResolvedConversation> & {
@@ -102,6 +104,9 @@ type QueueLead = Omit<DashboardQueueLead, "id" | "labels" | "meta" | "source"> &
     };
 
 type WorkflowModalStep = "closed" | "edit" | "confirm" | "saving";
+
+const getWorkflowString = (value: unknown, fallback = "") =>
+    String(value ?? fallback).trim();
 
 const LeadActionQueue = () => {
     const {
@@ -189,6 +194,48 @@ const LeadActionQueue = () => {
         const inbox = lead?.inbox_id ? inboxMap.get(Number(lead.inbox_id)) : null;
         return getLeadChannelName(lead, inbox);
     }, [inboxMap]);
+
+    const buildMetaCapiLeadPayload = useCallback((lead: QueueLead, meetingId?: unknown): MetaCapiLeadPayload => {
+        const channel = getChannelName(lead);
+        return {
+            id: lead.id,
+            fullName: getLeadName(lead),
+            email: getLeadEmail(lead),
+            phone: getRawLeadPhone(lead) || getLeadPhone(lead, channel),
+            conversationId: String(lead.id),
+            meetingId: getWorkflowString(meetingId, String(lead.id)),
+        };
+    }, [getChannelName]);
+
+    const sendMetaCapiWorkflowEvent = useCallback(async (params: {
+        eventKind: Exclude<MetaCapiEventKind, "test">;
+        lead: QueueLead;
+        appointmentDate: string;
+        appointmentTime: string;
+        meetingId?: unknown;
+    }) => {
+        try {
+            const result = await metaCapiClient.sendEvent({
+                eventKind: params.eventKind,
+                lead: buildMetaCapiLeadPayload(params.lead, params.meetingId),
+                channel: getChannelName(params.lead),
+                appointmentDate: params.appointmentDate,
+                appointmentTime: params.appointmentTime,
+            });
+
+            if (result.skipped) {
+                if (result.reason && !result.reason.toLowerCase().includes("no esta configurado")) {
+                    toast.info(`Meta CAPI omitido: ${result.reason}`);
+                }
+                return;
+            }
+
+            toast.success(result.testMode ? "Meta CAPI enviado en modo test" : "Meta CAPI enviado correctamente");
+        } catch (capiError) {
+            console.error("Meta CAPI event failed after workflow update:", capiError);
+            toast.error("El cambio se guardó, pero Meta CAPI no pudo recibir el evento.");
+        }
+    }, [buildMetaCapiLeadPayload, getChannelName]);
 
     const getQueueSearchValues = useCallback((lead: QueueLead) => {
         const attrs = getAttrs(lead);
@@ -342,7 +389,18 @@ const LeadActionQueue = () => {
                 successMessage: "Cita guardada correctamente"
             });
 
+            const appointmentDate = getWorkflowString(appointmentPayload.fecha_visita, getGuayaquilDateString());
+            const appointmentTime = getWorkflowString(appointmentPayload.hora_visita, getGuayaquilTimeString());
+            const appointmentMeetingId = appointmentPayload.meeting_id || appointmentPayload.id || appointmentLead.id;
+
             closeAppointmentWorkflow(true);
+            void sendMetaCapiWorkflowEvent({
+                eventKind: "appointment",
+                lead: appointmentLead,
+                appointmentDate,
+                appointmentTime,
+                meetingId: appointmentMeetingId,
+            });
         } catch (appointmentError) {
             console.error("Error confirming human appointment:", appointmentError);
             toast.error(friendlyErrorMessage("saveAppointment"));
@@ -424,7 +482,18 @@ const LeadActionQueue = () => {
                 successMessage: "Venta guardada correctamente"
             });
 
+            const operationDate = getWorkflowString(salePayload.fecha_monto_operacion, getGuayaquilDateString());
+            const operationTime = getGuayaquilTimeString();
+            const operationMeetingId = salePayload.meeting_id || salePayload.id || operationLead.id;
+
             closeOperationWorkflow(true);
+            void sendMetaCapiWorkflowEvent({
+                eventKind: "sale",
+                lead: operationLead,
+                appointmentDate: operationDate,
+                appointmentTime: operationTime,
+                meetingId: operationMeetingId,
+            });
         } catch (operationError) {
             console.error("Error confirming operation:", operationError);
             toast.error(friendlyErrorMessage("saveSale"));

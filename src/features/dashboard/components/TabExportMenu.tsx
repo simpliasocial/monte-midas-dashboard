@@ -37,7 +37,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/context/useAuth";
-import { isAdmin } from "@/domain/auth/permissions";
+import { canScheduleReports, isAdmin } from "@/domain/auth/permissions";
 import { DEFAULT_TAG_CONFIG } from "@/domain/dashboard";
 import { useDashboardContext } from "@/context/useDashboardContext";
 import { useDashboardData } from "@/features/dashboard/hooks/useDashboardData";
@@ -177,6 +177,7 @@ export function TabExportMenu({
     });
 
     const canConfigureColumns = isAdmin(role) && Boolean(tabId);
+    const canSchedule = canScheduleReports(role);
     const availableFormats = useMemo(
         () => profile
             ? REPORT_FORMATS.filter((formatOption) => profile.fileFormats.includes(formatOption.id))
@@ -448,11 +449,13 @@ export function TabExportMenu({
                             {formatOption.label}
                         </DropdownMenuItem>
                     ))}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={(event) => { event.preventDefault(); setScheduleOpen(true); }}>
-                        <Mail className="mr-2 h-4 w-4" />
-                        Reporte automático
-                    </DropdownMenuItem>
+                    {(canSchedule || canConfigureColumns) && <DropdownMenuSeparator />}
+                    {canSchedule && (
+                        <DropdownMenuItem onSelect={(event) => { event.preventDefault(); setScheduleOpen(true); }}>
+                            <Mail className="mr-2 h-4 w-4" />
+                            Reporte automático
+                        </DropdownMenuItem>
+                    )}
                     {canConfigureColumns && (
                         <DropdownMenuItem onSelect={(event) => { event.preventDefault(); setColumnsOpen(true); }}>
                             <Settings className="mr-2 h-4 w-4" />

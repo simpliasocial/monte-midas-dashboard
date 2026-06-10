@@ -10,17 +10,20 @@ const ALL_TABS: TabId[] = [
 ];
 
 const OPERATOR_TABS: TabId[] = ['followup', 'performance', 'reporting'];
+const MARKETING_TABS: TabId[] = ['funnel', 'trends', 'scoring', 'reporting'];
 
 /** Returns the tabs visible for a given role */
 export function getVisibleTabs(role: UserRole | null): TabId[] {
   if (!role) return [];
   if (role === 'operator') return OPERATOR_TABS;
-  return ALL_TABS; // both platform_admin and company_admin see all tabs
+  if (role === 'marketing') return MARKETING_TABS;
+  return ALL_TABS;
 }
 
 /** Returns the default landing tab for a role */
 export function getDefaultTab(role: UserRole | null): TabId {
   if (role === 'operator') return 'followup';
+  if (role === 'marketing') return 'funnel';
   return 'overview';
 }
 
@@ -46,5 +49,15 @@ export function canAccessCriticalReportProfile(
   profileKey: string,
 ): boolean {
   if (role === 'platform_admin' || role === 'company_admin') return true;
+  if (role === 'marketing') {
+    return profileKey === 'daily_operations' || profileKey === 'marketing_quality';
+  }
   return role === 'operator' && profileKey === 'daily_operations';
+}
+
+export function canScheduleReports(role: string | null): boolean {
+  return role === 'platform_admin'
+    || role === 'company_admin'
+    || role === 'marketing'
+    || role === 'operator';
 }

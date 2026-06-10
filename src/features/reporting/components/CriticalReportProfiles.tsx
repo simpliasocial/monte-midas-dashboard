@@ -59,7 +59,9 @@ export function CriticalReportProfiles({ onScheduled }: CriticalReportProfilesPr
                     Reportes críticos
                 </CardTitle>
                 <CardDescription>
-                    Cuatro perfiles listos para gerencia, operación, equipo y marketing. Cada uno puede descargarse ahora o programarse por correo.
+                    {role === "marketing"
+                        ? "Reportes habilitados para marketing, disponibles para descarga inmediata o programación por correo."
+                        : "Cuatro perfiles listos para gerencia, operación, equipo y marketing. Cada uno puede descargarse ahora o programarse por correo."}
                 </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 lg:grid-cols-2">

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useAuth } from "@/context/useAuth";
+import { canAccessCriticalReportProfile } from "@/domain/auth/permissions";
 import { LeadImportWizard } from "@/features/import";
 import { useReportingState } from "../hooks/useReportingState";
 import { CompanyContextPanel } from "./CompanyContextPanel";
@@ -8,7 +10,7 @@ import { ScheduledReportsTable } from "./ScheduledReportsTable";
 import { EditScheduledReportDialog } from "./EditScheduledReportDialog";
 import { type ScheduledReport } from "../domain/reportCatalog";
 
-const ReportingLayer = () => {
+const ReportManagementLayer = ({ isMarketing }: { isMarketing: boolean }) => {
     const {
         reports,
         isLoading,
@@ -20,6 +22,12 @@ const ReportingLayer = () => {
     } = useReportingState();
 
     const [editingReport, setEditingReport] = useState<ScheduledReport | null>(null);
+    const visibleReports = isMarketing
+        ? reports.filter((report) => (
+            Boolean(report.critical_profile_key)
+            && canAccessCriticalReportProfile("marketing", report.critical_profile_key || "")
+        ))
+        : reports;
 
     if (isLoading) {
         return (
@@ -31,16 +39,16 @@ const ReportingLayer = () => {
 
     return (
         <div className="space-y-8">
-            <LeadImportWizard onImported={refetch} />
+            {!isMarketing && <LeadImportWizard onImported={refetch} />}
 
-            <CompanyContextPanel />
+            {!isMarketing && <CompanyContextPanel />}
 
             <CriticalReportProfiles
                 onScheduled={fetchReports}
             />
 
             <ScheduledReportsTable
-                reports={reports}
+                reports={visibleReports}
                 onToggleStatus={toggleScheduledStatus}
                 onEdit={setEditingReport}
                 onDelete={deleteScheduledReport}
@@ -54,6 +62,12 @@ const ReportingLayer = () => {
 
         </div>
     );
+};
+
+const ReportingLayer = () => {
+    const { role } = useAuth();
+
+    return <ReportManagementLayer isMarketing={role === "marketing"} />;
 };
 
 export default ReportingLayer;

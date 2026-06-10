@@ -144,9 +144,10 @@ const getAuthProfile = async (supabase: SupabaseClient, authHeader: string | nul
 };
 
 const canReadMetaAds = (role: string | null) =>
-    role === "platform_admin" || role === "company_admin";
+    role === "platform_admin" || role === "company_admin" || role === "marketing";
 
-const canConfigureMetaAds = canReadMetaAds;
+const canConfigureMetaAds = (role: string | null) =>
+    role === "platform_admin" || role === "company_admin";
 
 const readMetaAdsConfig = async (supabase: SupabaseClient, accountId: number) => {
     const { data, error } = await supabase

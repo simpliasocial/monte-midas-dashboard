@@ -39,6 +39,15 @@ const formatDuration = (seconds: number) => {
 
 const formatDateFilter = (date?: Date) => date ? getGuayaquilDateString(date) : "Sin fecha";
 
+const getTrafficLevel = (value: number, maxValue: number) => {
+    if (value <= 0 || maxValue <= 0) return "Sin actividad";
+
+    const intensity = value / maxValue;
+    if (intensity > 0.7) return "Tráfico alto";
+    if (intensity > 0.3) return "Tráfico medio";
+    return "Tráfico bajo";
+};
+
 
 
 const sourceLabel = (events: IncomingMessageTrafficEvent[]) => {
@@ -183,7 +192,7 @@ const OperationalEfficiency = () => {
                 if (count > max) max = count;
             });
         });
-        return max || 1;
+        return max;
     }, [heatmapData]);
 
 
@@ -336,7 +345,7 @@ const OperationalEfficiency = () => {
                             <div>
                                 <CardTitle className="flex items-center gap-2 text-base">
                                     <MessageCircle className="h-5 w-5 text-primary" />
-                                    Horas pico de trafico
+                                    Horas pico de tráfico
                                 </CardTitle>
                                 <CardDescription className="mt-1 max-w-3xl">
                                     Intensidad de mensajes entrantes por día de la semana y hora (Hora local Guayaquil).
@@ -369,6 +378,25 @@ const OperationalEfficiency = () => {
                                         {trafficError}
                                     </div>
                                 )}
+                                <div className="rounded-lg border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+                                    <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                                        <p>
+                                            <span className="font-semibold text-foreground">¿Cómo se clasifica?</span>{" "}
+                                            Cada celda cuenta los mensajes entrantes de ese día y hora, y se compara con la celda de mayor volumen dentro del rango y canal seleccionados.
+                                        </p>
+                                        {maxHeatmapValue > 0 && (
+                                            <Badge variant="outline" className="w-fit shrink-0 bg-background">
+                                                Referencia: 100% = {maxHeatmapValue} {maxHeatmapValue === 1 ? "mensaje" : "mensajes"}
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5 font-medium text-foreground/80">
+                                        <span><span className="text-amber-400">●</span> Bajo: más de 0% hasta 30%</span>
+                                        <span><span className="text-amber-500">●</span> Medio: más de 30% hasta 70%</span>
+                                        <span><span className="text-amber-600">●</span> Alto: más de 70% hasta 100%</span>
+                                        <span><span className="text-slate-300">●</span> Sin actividad: 0 mensajes</span>
+                                    </div>
+                                </div>
                                 <div className="overflow-x-auto">
                                     <div className="min-w-[900px] pb-2 pt-2">
                                         <div className="flex">
@@ -388,7 +416,8 @@ const OperationalEfficiency = () => {
                                                         <div key={`row-${dayIdx}`} className="contents">
                                                             {Array.from({ length: 24 }).map((_, hour) => {
                                                                 const val = heatmapData[dayIdx][hour];
-                                                                const intensity = val > 0 ? (val / maxHeatmapValue) : 0;
+                                                                const intensity = val > 0 && maxHeatmapValue > 0 ? (val / maxHeatmapValue) : 0;
+                                                                const trafficLevel = getTrafficLevel(val, maxHeatmapValue);
                                                                 return (
                                                                     <ShadcnTooltip key={`cell-${dayIdx}-${hour}`}>
                                                                         <TooltipTrigger asChild>
@@ -406,7 +435,10 @@ const OperationalEfficiency = () => {
                                                                                 {['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][dayIdx]}
                                                                             </p>
                                                                             <p className="text-sm font-semibold">
-                                                                                {hour.toString().padStart(2, '0')}:00 — {intensity > 0.7 ? 'Alto tráfico' : intensity > 0.3 ? 'Tráfico medio' : val > 0 ? 'Tráfico bajo' : 'Sin actividad'}
+                                                                                {hour.toString().padStart(2, '0')}:00 — {trafficLevel}
+                                                                            </p>
+                                                                            <p className="text-xs text-muted-foreground">
+                                                                                {val} {val === 1 ? "mensaje entrante" : "mensajes entrantes"}
                                                                             </p>
                                                                         </TooltipContent>
                                                                     </ShadcnTooltip>

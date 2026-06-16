@@ -510,8 +510,20 @@ const LeadActionQueue = () => {
     };
 
     const handleConfirmTagChange = () => {
-        if (!newTag) return;
-        setIsTagConfirmOpen(true);
+        if (!newTag || !selectedLead) return;
+        const normalizedTag = newTag.toLowerCase().replace(/_/g, " ");
+        const isAppointment = newTag === humanAppointmentTargetLabel || normalizedTag.includes("agenda cita") || normalizedTag.includes("cita agendada");
+        const isSale = newTag === humanSaleTargetLabel || normalizedTag.includes("venta exitosa");
+
+        if (isAppointment) {
+            setIsTagDialogOpen(false);
+            openAppointmentDialog(selectedLead);
+        } else if (isSale) {
+            setIsTagDialogOpen(false);
+            openOperationDialog(selectedLead);
+        } else {
+            setIsTagConfirmOpen(true);
+        }
     };
 
     const executeTagChange = async () => {
@@ -684,11 +696,11 @@ const LeadActionQueue = () => {
                         </div>
 
                         {appointmentModalStep === "edit" && (
-                            <ScrollArea className="max-h-[380px] pr-4">
+                            <div className="max-h-[60vh] overflow-y-auto pr-4">
                                 <div className="space-y-4">
                                     {configuredAppointmentFields.map(renderAppointmentField)}
                                 </div>
-                            </ScrollArea>
+                            </div>
                         )}
 
                         {appointmentModalStep !== "edit" && (
@@ -777,11 +789,11 @@ const LeadActionQueue = () => {
                         </div>
 
                         {operationModalStep === "edit" && (
-                            <ScrollArea className="max-h-[380px] pr-4">
+                            <div className="max-h-[60vh] overflow-y-auto pr-4">
                                 <div className="space-y-4">
                                     {configuredSaleFields.map(renderSaleField)}
                                 </div>
-                            </ScrollArea>
+                            </div>
                         )}
 
                         {operationModalStep !== "edit" && (

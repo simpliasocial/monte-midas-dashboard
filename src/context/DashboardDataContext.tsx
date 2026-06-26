@@ -409,17 +409,20 @@ export const DashboardDataProvider = ({ children }: { children: ReactNode }) => 
         if (showLoading) setLoading(true);
 
         try {
-            const [historicalResult, liveResult] = await Promise.allSettled([
+            const [historicalResult, importedResult, liveResult] = await Promise.allSettled([
                 hybridConversationRepository.fetchHistoricalBeforeLiveWindow(),
+                hybridConversationRepository.fetchImportedConversations(),
                 hybridConversationRepository.fetchLiveConversations(signal)
             ]);
 
             if (signal.aborted) return;
 
             const historicalSucceeded = historicalResult.status === 'fulfilled';
+            const importedSucceeded = importedResult.status === 'fulfilled';
             const liveSucceeded = liveResult.status === 'fulfilled';
 
             const historical = historicalSucceeded ? historicalResult.value.payload : [];
+            const imported = importedSucceeded ? importedResult.value.payload : [];
             const live = liveSucceeded ? liveResult.value.payload : previousLiveFallback();
 
             setHistoricalError(historicalSucceeded ? null : errorMessage(historicalResult.reason));
@@ -427,12 +430,12 @@ export const DashboardDataProvider = ({ children }: { children: ReactNode }) => 
 
             if (liveSucceeded) setLastLiveFetchAt(new Date());
 
-            if (!historicalSucceeded && !liveSucceeded && conversationsRef.current.length === 0) {
+            if (!historicalSucceeded && !importedSucceeded && !liveSucceeded && conversationsRef.current.length === 0) {
                 setError('No se pudo cargar ni Chatwoot live ni Supabase historico.');
                 return;
             }
 
-            let merged = mergeConversationsPreferApi(historical, live);
+            let merged = mergeConversationsPreferApi([...historical, ...imported], live);
 
             const now = Date.now();
             const shouldRefreshHistoricalSnapshots = historicalSucceeded && (

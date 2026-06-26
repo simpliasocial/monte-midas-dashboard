@@ -4,6 +4,7 @@ import type { ConversationRepository } from "@/application/dashboard";
 export const hybridConversationRepository: ConversationRepository = {
     fetchHybridConversations: (signal) => HybridDashboardService.fetchHybridConversations(signal),
     fetchHistoricalBeforeLiveWindow: () => HybridDashboardService.fetchHistoricalBeforeLiveWindow(),
+    fetchImportedConversations: () => HybridDashboardService.fetchImportedConversations(),
     fetchLiveConversations: (signal) => HybridDashboardService.fetchLiveConversations(signal),
     refreshConversationDetailsById: (conversationIds, params) =>
         HybridDashboardService.refreshConversationDetailsById(conversationIds, params),

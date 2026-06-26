@@ -34,6 +34,7 @@ import { getGuayaquilDateString, getGuayaquilTimeString } from "@/lib/guayaquilT
 import { metaCapiClient } from "@/infrastructure/supabase/MetaCapiClient";
 import type { MetaCapiEventKind, MetaCapiLeadPayload } from "@/features/followup/model/metaCapiModel";
 import { friendlyErrorMessage } from "@/lib/displayCopy";
+import { ManualSaleDialog } from "@/features/manual-sale/components/ManualSaleDialog";
 
 type WorkflowModalStep = "closed" | "edit" | "confirm" | "saving";
 
@@ -589,6 +590,7 @@ const ConversationsLayer = () => {
                         </div>
 
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                            <ManualSaleDialog onSuccess={() => refetchContext()} />
                             <Badge variant="outline" className="h-9 justify-center px-3">
                                 {dataSource === 'HYBRID' ? 'Datos en vivo + historial' : dataSource === 'API_ONLY' ? 'Datos en vivo' : 'Historial disponible'}
                             </Badge>

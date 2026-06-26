@@ -10,6 +10,7 @@ export interface ConversationRepository {
         historicalCount: number;
     }>;
     fetchHistoricalBeforeLiveWindow(): Promise<{ payload: MinifiedConversation[]; count: number }>;
+    fetchImportedConversations(): Promise<{ payload: MinifiedConversation[]; count: number }>;
     fetchLiveConversations(signal?: AbortSignal): Promise<{ payload: MinifiedConversation[]; meta: unknown }>;
     refreshConversationDetailsById(
         conversationIds: number[],

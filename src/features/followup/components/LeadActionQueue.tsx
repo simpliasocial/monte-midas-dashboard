@@ -36,6 +36,7 @@ import {
     formatBusinessLabel,
     friendlyErrorMessage
 } from "@/lib/displayCopy";
+import { ManualSaleDialog } from "@/features/manual-sale/components/ManualSaleDialog";
 import {
     Dialog,
     DialogContent,
@@ -599,6 +600,7 @@ const LeadActionQueue = () => {
                 </div>
 
                 <div className="flex items-center gap-2 w-full lg:w-auto lg:ml-auto justify-end">
+                    <ManualSaleDialog onSuccess={() => refetch()} />
                     <TabExportMenu tabId="followup" compact />
                     <Button variant="outline" size="icon" onClick={refetch} title="Actualizar datos">
                         <RefreshCw className="h-4 w-4" />
